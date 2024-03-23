@@ -65,6 +65,10 @@ char pymerlin_targetgen[] = {
 #include "target_generator/pymerlin-targetgen.inc"
     0x00};
 
+char pymerlin_topo_hm[] = {
+#include "topology/pymerlin-topo-hm.inc"
+    0x00};
+
 char pymerlin_topo_dragonfly[] = {
 #include "topology/pymerlin-topo-dragonfly.inc"
     0x00};
