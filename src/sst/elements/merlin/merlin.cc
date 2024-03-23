@@ -105,6 +105,7 @@ public:
         primary_module->addSubModule("router",pymerlin_router,"pymerlin-router.py");
         primary_module->addSubModule("interface",pymerlin_interface,"interfaces/pymerlin-interface.py");
         primary_module->addSubModule("targetgen",pymerlin_targetgen,"interfaces/pymerlin-targetgen.py");
+        primary_module->addSubModule("topology",pymerlin_topo_hm,"topology/pymerlin-topo-hm.py");
         primary_module->addSubModule("topology",pymerlin_topo_dragonfly,"topology/pymerlin-topo-dragonfly.py");
         primary_module->addSubModule("topology",pymerlin_topo_hyperx,"topology/pymerlin-topo-hyperx.py");
         primary_module->addSubModule("topology",pymerlin_topo_fattree,"topology/pymerlin-topo-fattree.py");
