@@ -95,10 +95,15 @@ if __name__ == "__main__":
         #者在模拟结束后进行分析。
         endPoint.enableAllStatistics(rate)
 
-
+    #拓扑对象被创建后、在实际构建拓扑之前调用，以确保所有必要的参数都已正确设置
     topo.prepParams()
     endPoint.prepParams()
+    #将endpoint对象关联到topo对象上，这样拓扑就知道如何处理端点
+    #包括数据的发送和接收、流量的生成和监控等
+    #这是在构建拓扑之前建立拓扑和端点之间关系的重要步骤。
     topo.setEndPoint(endPoint)
+    #最后，build方法用于根据之前设置的参数实际构建拓扑结构，涉及到创建节点、建立节点、初始化节点
+    #一旦build()方法被调用，模拟的拓扑结构就完成了设置，可以开始模拟运行
     topo.build()
 
     if ( stats != 0 ):
