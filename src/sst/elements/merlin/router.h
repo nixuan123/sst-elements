@@ -35,21 +35,28 @@ namespace Merlin {
 #define VERIFY_DECLOCKING 0
 
 [[deprecated("INIT_BROADCAST_ADDR has been deprecated, please use UNTIMED_BROADCAST_ADDR")]]
+//初始化了一个广播地址，此地址通常用于发送数据包到网络上的设备
 const int INIT_BROADCAST_ADDR = -1;
+//初始化了一个未定时（无特定时间限制）的广播地址，一个用于非定时广播，一个用于定时广播
 const int UNTIMED_BROADCAST_ADDR = -1;
 
+//与网络拓扑相关的事件（路由器加入或离开网络、链路状态变拓扑结构的更新等等）
 class TopologyEvent;
+//与控制路由器相关的事件（消息的发送、接收、处理）
 class CtrlRtrEvent;
+//路由器内部发生的事件（包括路由决策、包转发、内部状态机的转换等）
 class internal_router_event;
 
 class Router : public Component {
 private:
+    //此变量用于指示是否需要在事件发生时发出通知。如果它为true则意味着
+    //路由器需要在某些事件发生时通知调用者或监听器
     bool requestNotifyOnEvent;
 
 protected:
     inline void setRequestNotifyOnEvent(bool state)
     { requestNotifyOnEvent = state; }
-
+    //用于跟踪具有数据的虚拟通道的数量
     int vcs_with_data;
 
 public:
@@ -57,42 +64,48 @@ public:
     Router(ComponentId_t id) :
         Component(id),
         requestNotifyOnEvent(false),
-        vcs_with_data(0)
+        vcs_with_data(0)//表示开始时没有虚拟通道包含数据
     {}
 
     virtual ~Router() {}
 
     inline bool getRequestNotifyOnEvent() { return requestNotifyOnEvent; }
 
+    //用于通知其他部分或者调用者某个事件已经发生
     virtual void notifyEvent() {}
-
+    //用于增加vcx_with_data成员变量的值，内联函数其实就是直接把函数体拿过来
     inline void inc_vcs_with_data() { vcs_with_data++; }
     inline void dec_vcs_with_data() { vcs_with_data--; }
     inline int get_vcs_with_data() { return vcs_with_data; }
 
+    //获取输出缓冲区的信用值（Credits）
     virtual int const* getOutputBufferCredits() = 0;
     virtual void sendCtrlEvent(CtrlRtrEvent* ev, int port = -1) = 0;
     virtual void recvCtrlEvent(int port, CtrlRtrEvent* ev) = 0;
 
+    //用于报告传入的内部路由器事件
     virtual void reportIncomingEvent(internal_router_event* ev) = 0;
 
 };
-
+//下面这个是一个预处理宏定义，用于启用追踪功能
 #define MERLIN_ENABLE_TRACE
 
 
 class BaseRtrEvent : public Event {
 
 public:
+    //包含了五种可能的路由器事件类型：信用、数据包、内部事件、初始化、控制事件
     enum RtrEventType {CREDIT, PACKET, INTERNAL, INITIALIZATION, CTRL};
 
+    //用于获取当前事件的类型，它被声明为const，说明调用这个函数不会修改对象的状态
     inline RtrEventType getType() const { return type; }
 
+    //这个函数用于序列化事件对象
     void serialize_order(SST::Core::Serialization::serializer &ser)  override {
         Event::serialize_order(ser);
         ser & type;
     }
-
+//初始化成员变量type，并调用父类的构造函数
 protected:
     BaseRtrEvent(RtrEventType type) :
         Event(),
@@ -102,14 +115,15 @@ protected:
     BaseRtrEvent()  {} // For Serialization only
 
 private:
+    //用于存储事件的类型
     RtrEventType type;
-
+    //这是一个宏，用于实现序列化接口，它告诉编译器BaseRtrEvent类需要支持序列化
     ImplementSerializable(SST::Merlin::BaseRtrEvent);
 };
 
 
 class RtrEvent : public BaseRtrEvent {
-
+    //vip类internal_router_event类可以访问RtrEvent类中所有私有和受保护的成员
     friend class internal_router_event;
 
 public:
@@ -132,7 +146,7 @@ public:
     {
         if (request) delete request;
     }
-
+    //设置事件的注入时间，SimTime_t是一个仿真时间类型
     inline void setInjectionTime(SimTime_t time) {injectionTime = time;}
     // inline void setTraceID(int id) {traceID = id;}
     // inline void setTraceType(TraceType type) {trace = type;}
@@ -145,11 +159,12 @@ public:
     inline SimTime_t getInjectionTime(void) const { return injectionTime; }
     inline SST::Interfaces::SimpleNetwork::Request::TraceType getTraceType() const {return request->getTraceType();}
     inline int getTraceID() const {return request->getTraceID();}
-
+    //这个函数用于计算事件的大小，以数据流单元"flits"为单位，他将请求的大小除以每个flits的大小
+    //并向上取整以确定flit数量，结果存储在size_in_flits成员变量中
     inline void computeSizeInFlits(int flit_size ) {size_in_flits = (request->size_in_bits + flit_size - 1) / flit_size; }
     inline int getSizeInFlits() { return size_in_flits; }
     inline int getSizeInBits() { return request->size_in_bits; }
-
+    //这个函数用于获取请求目的地址，他调用request对象的dest成员变量并返回结果
     inline SST::Interfaces::SimpleNetwork::nid_t getDest() const {return request->dest;}
 
     inline SST::Interfaces::SimpleNetwork::nid_t getTrustedSrc() { return trusted_src; }
