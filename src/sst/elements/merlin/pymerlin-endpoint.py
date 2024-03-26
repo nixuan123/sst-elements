@@ -21,13 +21,16 @@ from sst.merlin.base import *
 class TestJob(Job):
     def __init__(self,job_id,size):
         Job.__init__(self,job_id,size)
+        #声明函数声明了作业和ID的大小、对等体数量、消息数量、消息大小、是否发送为定时的广播
         self._declareParams("main",["num_peers","num_messages","message_size","send_untimed_bcast"])
         self.num_peers = size
         self._lockVariable("num_peers")
 
+    #getName方法返回作业的名称，这里是叫做TestJob
     def getName(self):
         return "TestJob"
-
+    #build方法用于构建网络接口组件NIC，并为其设置统计信息和参数，他还设置了NIC的
+    #逻辑节点ID，并实例化了一个网络接口
     def build(self, nID, extraKeys, link = None):
         nic = sst.Component("testNic_%d"%nID, "merlin.test_nic")
         self._applyStatisticsSettings(nic)
@@ -41,7 +44,8 @@ class TestJob(Job):
         return NetworkInterface._instanceNetworkInterfaceBackCompat(
             self.network_interface,nic,"networkIF",0,self.job_id,self.size,id,True,link)
 
-
+#初始化时，设置作业的ID和带线啊哦，并声明了一组不同的参数，如offered_load(提供的负载)、link_bw
+#(链路的带宽)、warmup_time(预热时间)等。
 class OfferedLoadJob(Job):
     def __init__(self,job_id,size):
         Job.__init__(self,job_id,size)
