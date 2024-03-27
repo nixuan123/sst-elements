@@ -96,6 +96,7 @@ topo_torus::~topo_torus()
 void
 topo_torus::route_packet(int port, int vc, internal_router_event* ev)
 {
+    //调用的是router.h文件463行的getDest()函数，返回一个encap_ev->request->dest
     int dest_router = get_dest_router(ev->getDest());
     if ( dest_router == router_id ) {
         ev->setNextPort(get_dest_local_port(ev->getDest()));
