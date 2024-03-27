@@ -204,13 +204,13 @@ private:
 
 };
 
-
+//用于在网络仿真中处理控制消息：如拥塞控制或拓扑变化通知
 class CtrlRtrEvent : public BaseRtrEvent {
 
-public:
+public://CONGESTION代表拥塞、TOPOLOGY代表拓扑变化
     enum CtrlRtrEventType {CONGESTION, TOPOLOGY};
 
-private:
+private://用于存储控制事件的类型（5种中的一个）
     CtrlRtrEventType ctrl_type;
 
 public:
@@ -259,16 +259,17 @@ public:
         size_in_flits(size_in_flits)
     {}
 
-
+    //设置事件的大小，以flits为单位
     inline void setSizeInFlits(int size) { size_in_flits = size; }
     inline int getSizeInFlits() { return size_in_flits; }
-
+    //设置事件的目标为一个路由器，通过设置dest结构体的addr成员变量为给定的id。
+    //dest结构体是一个64位的二进制整数
     inline void setRtrDest(SST::Interfaces::SimpleNetwork::nid_t id) {
         dest.addr = id;
         dest.addr_is_router = true;
         dest.addr_for_router = true;
     }
-
+    //设置事件的目标为一个端点所连接的路由器，它通过设置dest结构体的成员变量addr
     inline void setRtrDestByEndpoint(SST::Interfaces::SimpleNetwork::nid_t id) {
         dest.addr = id;
         dest.addr_is_router = false;
@@ -280,11 +281,11 @@ public:
         dest.addr_is_router = false;
         dest.addr_for_router = false;
     }
-
+    //用于获取事件的目标地址
     inline const CtrlEventAddr& getDest() {
         return dest;
     }
-
+    //这是一个覆盖掉基类（父类）的函数，定义事件对象的序列化顺寻
     void serialize_order(SST::Core::Serialization::serializer &ser)  override {
         BaseRtrEvent::serialize_order(ser);
         ser & size_in_flits;
@@ -294,16 +295,18 @@ public:
     }
 
 protected:
+    //将BaseRtrEvent序列化
     CtrlRtrEvent() : BaseRtrEvent() {} // For serialization
+    //告诉编译器CtrlRtrEvent类也需要实现序列化接口
     ImplementSerializable(SST::Merlin::CtrlRtrEvent);
 };
 
-
+//定义了一个CtrlRtrEvent的子类
 class CongestionEvent : public CtrlRtrEvent {
 private:
     int target;
-    int backoff;
-    int throttle_time;
+    int backoff;//退避时间
+    int throttle_time;//节流时间
 
 public:
     CongestionEvent(int size_in_flits, int target, int backoff, int throttle_time) :
@@ -423,8 +426,11 @@ private:
 };
 
 class internal_router_event : public BaseRtrEvent {
+    //要轮询或选择下一个处理的端口
     int next_port;
+    //用于选择下一个要使用的虚拟通道
     int next_vc;
+    //存储当前正在使用的虚拟通道的编号
     int vc;
     int credit_return_vc;
     RtrEvent* encap_ev;
@@ -447,10 +453,12 @@ public:
     {
         return new internal_router_event(*this);
     };
-
+//下面的函数可以在路由器类的外部快速地设置和查询路由器的端口和虚拟通道状态，
+//而无需访问类的私有成员。
+    //设置用于返回信用的虚拟通道编号
     inline void setCreditReturnVC(int vc) {credit_return_vc = vc; return;}
     inline int getCreditReturnVC() {return credit_return_vc;}
-
+    //用于设置下一个要使用的端口编号。将np的值赋值给next_port
     inline void setNextPort(int np) {next_port = np; return;}
     inline int getNextPort() {return next_port;}
 
