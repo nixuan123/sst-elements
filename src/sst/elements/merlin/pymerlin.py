@@ -99,8 +99,11 @@ class topoSimple(Topo):
         _params["num_peers"] = int(_params["router_radix"])
 
     def build(self):
+        //创建一个新的路由器实例rtr。方法的第一个参数是路由器ID，在这里是0
         rtr = self._instanceRouter(0,"merlin.hr)_router")
+        //为rtr组件设置一个名为topology的子组件，子组件的类型是singlerouter
         rtr.setSubComponent("topology","merlin.singlerouter",0)
+        //将 "merlin.singlerouter" 赋值给 _params 字典中的 "topology" 键，这是为了在整个模拟中使用这个拓扑类型。
         _params["topology"] = "merlin.singlerouter"
         _params["debug"] = debug
 #        rtr.addParams(_params.subset(self.rtrKeys))
@@ -194,7 +197,7 @@ class topoTorus(Topo):
     
 
     def build(self):
-
+    #num_peers指网络中对等节点的数量
         num_routers = _params["num_peers"] // _params["torus.local_ports"]
         links = dict()
         def getLink(leftName, rightName, num):
@@ -324,63 +327,127 @@ class topoMesh(Topo):
     
     
     def build(self):
-
+        //计算了路由器的数量，通过网络中对等节点总数整除本地端口数
         num_routers = _params["num_peers"] // _params["mesh.local_ports"]
+        //初始化了一个空字典，用于存储以及创建的链路对象
         links = dict()
+        //定义获取链路的辅助函数
         def getLink(leftName, rightName, num):
+            //%s、%s、%d三个占位符，分别被leftName、rightName和num替换
+            //如果 leftName 是 "router1"，rightName 是 "switch1"，num 是 1，
+            //那么 name 的值将会是 "link_router1_switch1_1"。
             name = "link_%s_%s_%d"%(leftName, rightName, num)
+            //如果这个链路名称没有在links字典中
             if name not in links:
+                //将创建一个新的Link对象，然后这个对象会存在Links字典中
+                //下次如果遇到相同的name，就可以直接从字典中获取对应的
+                //Link对象，而不是重新创建一个
                 links[name] = sst.Link(name)
             return links[name]
-
+        //重命名操作：
+        //swap_keys 列表指定了三对原始键名和新键名的映射：
         swap_keys = [("mesh.shape","shape"),("mesh.width","width"),("mesh.local_ports","local_ports")]
-
+        //从原始的_params字典中提取出指定的键并将它们重命名为新的键名（shape、width、local_ports）
         _topo_params = _params.subsetWithRename(swap_keys);
-
+        //在一个循环中，用于为每个路由器设置其在网络拓扑中的位置
         for i in range(num_routers):
             # set up 'mydims'
+            //通过调用idToLoc函数将路由器的id——i转换为一个表示其在多维拓扑中位置的列表mydims
+            //这个列表中的每个元素代表路由器在相应维度上的坐标或标识符
             mydims = self._idToLoc(i)
+            //例如mydims是[2,3],则mylocstr为2x3
             mylocstr = self._formatShape(mydims)
-
+            //实例化了一个新的路由器对象，i是当前路由器id，merlin.hr_router是路由器的类名，这个实例话的路由器
+            //对象被赋值给rtr变量。
             rtr = self._instanceRouter(i,"merlin.hr_router")
             #rtr = sst.Component("rtr.%s"%mylocstr, "merlin.hr_router")
+            //调用rtr对象的addParams方法，用于给路由器添加一组参数，_params是一个包含所有
+            //模拟参数的字典，subset方法从_params中提取出与self.topoKeys和self.topoOpKeys
+            //相关的参数子集
             rtr.addParams(_params.subset(self.topoKeys, self.topoOptKeys))
+            //再次调用rtr对象的addParam方法，为路由器添加一个名为"id"的参数，其值为当前索引i
             rtr.addParam("id", i)
+            //调用rtr对象的setSubComponent方法，用于设置或获取名为"topology"的子组件,并将其配置为merlin.mesh类型
             topology = rtr.setSubComponent("topology","merlin.mesh")
+            //再次调用addParams方法，为其田间之前通过_params.subsetWithRename(swap_keys) 
+            //创建的参数字典 _topo_params，也即一些拓扑维度、宽度和本地端口数的信息
             topology.addParams(_topo_params)
 
+            //下面是为每个路由器创建链路，self.nd表示维度的数量，在多维mesh中，每个维度可以
+            //连接到不同的邻居路由器
             port = 0
             for dim in range(self.nd):
+                //创建了一个mydims的副本，存储在theirdims中，mydims是当前路由器在拓扑中的位置
+                //例如mydims=[2,3]
                 theirdims = mydims[:]
 
                 # Positive direction
+                //如果路由器在该维度的值加1小于该维度的大小，说明还没到最右边
                 if mydims[dim]+1 < self.dims[dim]:
+                    //更新theirdims，使其表示mydims正方向上的相邻路由器位置
                     theirdims[dim] = (mydims[dim] +1 ) % self.dims[dim]
+                    //如mydims=[2,3],theirdims=[2,4]
                     theirlocstr = self._formatShape(theirdims)
+                    //遍历当前维度上所有链路的编号
                     for num in range(self.dimwidths[dim]):
+                        //调用rtr的addLink方法，添加一个新的链路，链路是通过getLink函数创建的
+                        //他根据当前维度的位置和相邻维度的位置和链路编号num生成链路的名称，链路被添加到
+                        //路由器的"port%d"%port端口上，其中port是当前使用的端口号，_params["link_lat"]
+                        //是链路的延迟参数（addLink方法是Component专有的方法：
+                        //将链路连接到链路上具有指定延迟的指定端口）
                         rtr.addLink(getLink(mylocstr, theirlocstr, num), "port%d"%port, _params["link_lat"])
+                        //在添加链路后，将port加1，为下一个链路分配下一个端口号
                         port = port+1
+                //如果已经在当前维度的最大值位置
                 else:
+                    //跳过当前维度上的链路创建
                     port += self.dimwidths[dim]
 
                 # Negative direction
+                //检查当前路由器在该维度下的值是否大于0，若是说明他没在最左端
                 if mydims[dim] > 0:
+                    //更新theirdims，使其表示mydims负方向上的相邻路由器位置
                     theirdims[dim] = ((mydims[dim] -1) +self.dims[dim]) % self.dims[dim]
+                    //如mydims=[2,3],theirdims=[2,2]
                     theirlocstr = self._formatShape(theirdims)
+                    //遍历当前维度上所有链路的编号
                     for num in range(self.dimwidths[dim]):
+                        //调用rtr的addLink方法，添加一个新的链路，链路是通过getLink函数创建的
+                        //他根据当前维度的位置和相邻维度的位置和链路编号num生成链路的名称，链路被添加到
+                        //路由器的"port%d"%port端口上，其中port是当前使用的端口号，_params["link_lat"]
+                        //是链路的延迟参数（addLink方法是Component专有的方法：
+                        //将链路连接到链路上具有指定延迟的指定端口）
                         rtr.addLink(getLink(theirlocstr, mylocstr, num), "port%d"%port, _params["link_lat"])
                         port = port+1
+                //如果已经在当前维度的初始位置
                 else:
+                    //跳过当前维度上的链路创建。
                     port += self.dimwidths[dim]
-
+            
+            //为每个路由器创建和管理端点以及与之相连的网络接口卡（NIC）链路
+            //从0遍历到每个路由器本地端口数量-1
             for n in range(_params["mesh.local_ports"]):
+                //计算当前端点的唯一标识符nodeID，它是通过将路由器ID——id
+                //乘以每个路由器的本地端口数再加上n来计算的
                 nodeID = int(_params["mesh.local_ports"]) * i + n
+                //调用getEndPoint方法，传入nodeID并获取一个端点对象。然后
+                //它调用端点对象的build方法来构建端点，传入nodeID和空字典参数
+                //构建好的端点对象被赋值给ep变量
                 ep = self._getEndPoint(nodeID).build(nodeID, {})
+                //若端点对象被成功创建
                 if ep:
+                    //创建一个新的Link对象，用于表示网络接口卡（NIC）的链路
+                    //链路的名称由"nic(路由器id)(端口索引)"所代替
                     nicLink = sst.Link("nic_%d_%d"%(i, n))
+                    //检查实例的绑定是否为真
                     if self.bundleEndpoints:
+                       //确保链路在模拟过程中不会被中断或者删除
                        nicLink.setNoCut()
+                    //使用nicLink对象的connect方法将NIC链路连接到端点ep
+                    //同时，NIC链路还连接到路由器rtr的一个端口，端口号由"port%d"%port
+                    //参数给出，其中port是经过累加了的port，故不会和之前的port号重复
                     nicLink.connect(ep, (rtr, "port%d"%port, _params["link_lat"]))
+                //分配完后路由器上的port+1
                 port = port+1
 
 
