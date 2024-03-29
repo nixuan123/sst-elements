@@ -197,6 +197,7 @@ class topoTorus(Topo):
     
 
     def build(self):
+    #dim_width指的是链路的宽度，即a-b之间的链路条数！默认是1条
     #num_peers指网络中对等节点的数量
         num_routers = _params["num_peers"] // _params["torus.local_ports"]
         links = dict()
@@ -425,7 +426,7 @@ class topoMesh(Topo):
                     port += self.dimwidths[dim]
             
             //为每个路由器创建和管理端点以及与之相连的网络接口卡（NIC）链路
-            //从0遍历到每个路由器本地端口数量-1
+            //从0遍历到每个路由器本地端口数量
             for n in range(_params["mesh.local_ports"]):
                 //计算当前端点的唯一标识符nodeID，它是通过将路由器ID——id
                 //乘以每个路由器的本地端口数再加上n来计算的
