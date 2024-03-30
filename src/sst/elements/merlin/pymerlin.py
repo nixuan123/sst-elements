@@ -252,30 +252,49 @@ class topoTorus(Topo):
                 port = port+1
 
 
-
+//创建了一个名为topoMesh的类，它继承自Topo类，这意味着topoMesh类将由Topo类的所有属性和方法
 class topoMesh(Topo):
+    //topoMesh类的构造函数，当创建topoMesh类的新实例时，这个函数会被自动调用
     def __init__(self):
+        //这行代码调用父类Topo的构造函数，确保父类的初始化代码也能在子类实例化时执行
         Topo.__init__(self)
+        //初始化了一个名为topoKeys的实例变量，包含了一系列的字符串，这些字符串代表了拓扑配置
+        //中的关键参数名称，例如"topology"、"debug"、"num_ports"等
         self.topoKeys = ["topology", "debug", "num_ports", "flit_size", "link_bw", "xbar_bw", "mesh.shape", "mesh.width", "mesh.local_ports","input_latency","output_latency","input_buf_size","output_buf_size"]
+        //初始化了一个名为topoOpKeys的实例变量，如xbar_arb、num_vns、vn_remap等，这些参数可用于进一步定制拓扑的行为和特性
         self.topoOptKeys = ["xbar_arb","num_vns","vn_remap","vn_remap_shm","portcontrol.output_arb","portcontrol.arbitration.qos_settings","portcontrol.arbitration.arb_vns","portcontrol.arbitration.arb_vcs"]
+    //self指的时当前类的引用
     def getName(self):
+        //返回一个字符串"Mesh"
         return "Mesh"
+    //准备参数，用户通过这个函数给参数们赋值
     def prepParams(self):
 #        if "xbar_arb" not in _params:
 #            _params["xbar_arb"] = "merlin.xbar_arb_lru"
+        //表示网络之中对等节点的数量
         peers = 1
+        //表示路由器中的端口数，基数
         radix = 0
+        //用于存储拓扑的维度信息
         self.dims = []
+        //用于存储每个维度上链路的宽度，即路由器之间连接的链路根数
         self.dimwidths = []
         if not "mesh.shape" in _params:
+            //将num_dims键对应的值转换为整数，并将其赋值给self.nd(表示拓扑维度的数量，二维或者三维等等)
             self.nd = int(_params["num_dims"])
             for x in range(self.nd):
+                //每次迭代时询问当前维度的大小
                 print("Dim %d size:"%x)
+                //这行代码用于从用户那里获取输入，用户输入当前维度的大小，转换为整数赋值给变量ds
                 ds = int(input())
+                //将用户输入的维度大小ds添加到self.dims列表中，self.dims用于存储每个维度的大小
                 self.dims.append(ds);
+            //调用_formatShape方法，将self.dims列表转换为一个表示拓扑形装的字符串，并将其_params字典中的mesh.shape键
             _params["mesh.shape"] = self._formatShape(self.dims)
         else:
+            //将4x8x16的字符串解析为4、8、6并存储在self.dims变量中
             self.dims = [int(x) for x in _params["mesh.shape"].split('x')]
+            //若self.dims=[4,8,16]，则self.nd=3
             self.nd = len(self.dims)
         if not "mesh.width" in _params:
             for x in range(self.nd):
@@ -285,14 +304,19 @@ class topoMesh(Topo):
             _params["mesh.width"] = self._formatShape(self.dimwidths)
         else:
             self.dimwidths = [int(x) for x in _params["mesh.width"].split('x')]
-
+        //从_params字典中获取键为"mesh.local_ports"的值，表示每个路由器拥有的本地端口的数量
         local_ports = int(_params["mesh.local_ports"])
+        //计算radix的值，它是根据每个维度的链路宽度和每个路由器的本地端口数量来确定的
+        //这个2表示的是路由器的正向和负向两个方向
         radix = local_ports + 2 * sum(self.dimwidths)
 
         for x in self.dims:
+            //将所有维度的节点数相乘得到总的节点数
             peers = peers * x
+        //循环结束后，将节点数乘以每个路由器的本地端口数算出整个网络拓扑中的对等节点总数
         peers = peers * local_ports
 
+        //更新_params字典
         _params["num_peers"] = peers
         _params["num_dims"] = self.nd
         _params["topology"] = _params["topology"] = "merlin.mesh"
@@ -301,29 +325,47 @@ class topoMesh(Topo):
         _params["mesh.local_ports"] = local_ports
 
     def _formatShape(self, arr):
+        //遍历arr列表中的每个元素x，将每个整数x转换成字符串，并创建一个包含所有字符串的新表
+        //例如arr是[2,4,5],方法将返回字符串2x4x5
         return 'x'.join([str(x) for x in arr])
 
-
+    //此方法将一个路由器的线性索引（routerID）转换为多维位置坐标foo，将
+    //一个扁平的索引转换为多维坐标有利于进行路由查找和算法
     def _idToLoc(self,rtr_id):
+        //初始化一个空表foo，用于存储转换后的多维位置坐标
         foo = list()
+        //从self.nd-1开始向下迭代到0（不包括0），若nd=2，则迭代值i=1
         for i in range(self.nd-1, 0, -1):
+            //初始化一个div用于计算每个维度上的步长
             div = 1
+            //j从0迭代到(i-1)，i是最高维度的索引，迭代到第二高的维度，(i-1)=0
             for j in range(0, i):
+                //每次迭代都会将div乘以当前维度的大小，这样div就代表了从多维空间
+                //的第一个维度到第二高维度的总步长
                 div = div * self.dims[j]
+            //得到第一个维度的位置
             value = (rtr_id // div)
+            //添加到字典中
             foo.append(value)
+            //从原始的rtr_id中减去分配给当前维度的值，以便为下一个维度计算坐标
             rtr_id = rtr_id - (value * div)
+        //完成维度数-1次的迭代后，将剩余的rtr_id添加到列表foo的末尾，这代表最后一个维度的坐标值
         foo.append(rtr_id)
+        最后反转foo字典
         foo.reverse()
         return foo
-
+    //将路由器的线性索引(routerID)转换为一个路由器的名称，如id=4的路由器=>[0,1]=>"rtr_0x1"
     def getRouterNameForId(self,rtr_id):
         return self.getRouterNameForLocation(self._idToLoc(rtr_id))
-
+    
+    //若location=[0,1],则_formatShape会返回0x1，函数返回字符串为"rtr_0x1"
     def getRouterNameForLocation(self,location):
         return "rtr_%s"%(self._formatShape(location))
     
+    //此方法目的是在一个SST模拟中根据给定的多维位置坐标比如[0,1]找到一个路由器组件
     def findRouterByLocation(self,location):
+        //先通过getRouterNameForLocation将[0,1]=>"rtr_0x1",然后调用sst对象的
+        //findComponentByName方法查找是否有对应的路由器组件名称
         return sst.findComponentByName(self.getRouterNameForLocation(location));
     
     
@@ -351,6 +393,7 @@ class topoMesh(Topo):
         //从原始的_params字典中提取出指定的键并将它们重命名为新的键名（shape、width、local_ports）
         _topo_params = _params.subsetWithRename(swap_keys);
         //在一个循环中，用于为每个路由器设置其在网络拓扑中的位置
+        //假设num_routers为16，则i从0开始一直遍历到15
         for i in range(num_routers):
             # set up 'mydims'
             //通过调用idToLoc函数将路由器的id——i转换为一个表示其在多维拓扑中位置的列表mydims
