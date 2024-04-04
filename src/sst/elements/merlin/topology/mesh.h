@@ -94,7 +94,7 @@ private:
 
 };
 
-
+//对topo_mesh进行修改
 class topo_mesh: public Topology {
 
 public:
@@ -126,10 +126,15 @@ public:
 
 
 private:
+    //新添的四个参数
+    int a;
+    int b;
+    int x;
+    int y;
     int router_id;
     int* id_loc;
 
-    int dimensions;
+    //int dimensions;由于HammingMesh默认是二维结构，所以不需要提供维度的参数
     int* dim_size;
     int* dim_width;
 
@@ -141,7 +146,8 @@ private:
     int num_vns;
     
 public:
-    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns);
+    //初始化需要多接受a,b,x,y四个参数，这四个参数可以唯一确定路由器的位置
+    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns,int a,int b,int x,int y);
     ~topo_mesh();
 
     virtual void route_packet(int port, int vc, internal_router_event* ev);
