@@ -24,26 +24,28 @@
 using namespace SST::Merlin;
 
 
-topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns) :
+topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns,int* hm_id) :
     Topology(cid),
+    hm_id(hm_id),//新添一个hm_id，这样就可以唯一确定这个路由器在hm拓扑中的位置
     router_id(rtr_id),
     num_vns(num_vns)
 {
 
     // Get the various parameters
     std::string shape;
+    //获取mesh.shape的字符串，例如返回"4x4x2x2"
     shape = params.find<std::string>("shape");
     if ( !shape.compare("") ) {
     }
 
     // Need to parse the shape string to get the number of dimensions
     // and the size of each dimension
-    dimensions = std::count(shape.begin(),shape.end(),'x') + 1;
+    dimensions = 2;
 
     dim_size = new int[dimensions];
     dim_width = new int[dimensions];
     port_start = new int[dimensions][2];
-
+    //dimensions默认为4，若传入2x2x2x2，dim_size=[2,2,2,2]
     parseDimString(shape, dim_size);
 
     std::string width = params.find<std::string>("width", "");
@@ -75,9 +77,10 @@ topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_i
     }
 
     local_port_start = needed_ports;// Local delivery is on the last ports
-
-    id_loc = new int[dimensions];
-    idToLocation(router_id, id_loc);
+    //id_loc现在是一个有四个参数的数组，例如通过[1,1,1,0]确定他在hm拓扑中的唯一位置
+    id_loc = new int[dimensions]; 
+    //此函数新添一个hm_id参数,若hm_id=2,router_id=3,则id_loc=[1,1,0,1]
+    idToLocation(hm_id, router_id, id_loc);
 }
 
 topo_mesh::~topo_mesh()
@@ -88,6 +91,7 @@ topo_mesh::~topo_mesh()
     delete [] port_start;
 }
 
+//路由具体该怎么走
 void
 topo_mesh::route_packet(int port, int vc, internal_router_event* ev)
 {
@@ -233,22 +237,24 @@ topo_mesh::getPortState(int port) const
     return R2R;
 }
 
+//根据din_size数组的范围确定location数组
+void idToLocation(int hm_id, int run_id, int *location) {
+    // 根据 hm_id 计算 location 数组的后两位
+    location[dimensions - 2] = (hm_id % dim_size[dimensions - 2]);
+    location[dimensions - 1] = (hm_id / dim_size[dimensions - 2]) % dim_size[dimensions - 1];
 
-void
-topo_mesh::idToLocation(int run_id, int *location) const
-{
-	for ( int i = dimensions - 1; i > 0; i-- ) {
-		int div = 1;
-		for ( int j = 0; j < i; j++ ) {
-			div *= dim_size[j];
-		}
-		int value = (run_id / div);
-		location[i] = value;
-		run_id -= (value * div);
-	}
-	location[0] = run_id;
+    // 根据 run_id 计算 location 数组的前两位
+    location[0] = (run_id % dim_size[0]);
+    location[1] = (run_id / dim_size[0]) % dim_size[1];
+
+    // 确保每个位置的值都在 0 到 dim_size 对应维度的范围内
+    for (int i = 0; i < dimensions; i++) {
+        if (location[i] >= dim_size[i]) {
+            location[i] = 0; // 如果计算出的值超出范围，则重置为 0
+        }
+    }
 }
-
+//解析mesh.shape字符串的函数，例如传入4x4x2x2，解析出来的数组output应为[4,4,2,2]
 void
 topo_mesh::parseDimString(const std::string &shape, int *output) const
 {
@@ -264,8 +270,9 @@ topo_mesh::parseDimString(const std::string &shape, int *output) const
 }
 
 
+//新添了一个hm_id参数
 int
-topo_mesh::get_dest_router(int dest_id) const
+topo_mesh::get_dest_router(int hm_id, int dest_id) const
 {
     return dest_id / num_local_ports;
 }
