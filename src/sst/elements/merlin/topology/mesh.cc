@@ -91,16 +91,23 @@ topo_mesh::~topo_mesh()
     delete [] port_start;
 }
 
-//路由具体该怎么走
+//路由器内部的路由具体该怎么走，即这个数据包下一步要送到该路由器的具体的端口id
+//ev->getDest()返回的是一个网络标识符Node ID类型的数据
 void
 topo_mesh::route_packet(int port, int vc, internal_router_event* ev)
-{
+{   //通过网卡id定位到路由器id,但要注意还有一个hm_id没有确定
     int dest_router = get_dest_router(ev->getDest());
+    //如果定位到的路由器id=当前的路由器id,即Node ID(网卡id/终端id)在当前路由器上
     if ( dest_router == router_id ) {
+	//则将路由器内部路由的下一个端口设置为本地的连接网卡的端口号
         ev->setNextPort(get_dest_local_port(ev->getDest()));
-    } else {
+    }
+    //若定位到的路由器不在当前路由器上，则进行当前路由器端口选择，选择一个离目标近的
+    //出口port。
+    else {
+        //强制转换
         topo_mesh_event *tt_ev = static_cast<topo_mesh_event*>(ev);
-
+        
         for ( int dim = tt_ev->routing_dim ; dim < dimensions ; dim++ ) {
             if ( tt_ev->dest_loc[dim] != id_loc[dim] ) {
 
@@ -142,7 +149,7 @@ topo_mesh::process_input(RtrEvent* ev)
     // Need to figure out what the mesh address is for easier
     // routing.
     int run_id = get_dest_router(tt_ev->getDest());
-    idToLocation(run_id, tt_ev->dest_loc);
+    idToLocation(hm_id, run_id, tt_ev->dest_loc);
 
 	return tt_ev;
 }
@@ -198,10 +205,10 @@ internal_router_event* topo_mesh::process_UntimedData_input(RtrEvent* ev)
     tt_ev->setEncapsulatedEvent(ev);
     if ( tt_ev->getDest() == UNTIMED_BROADCAST_ADDR ) {
         /* For broadcast, first send to rtr 0 */
-        idToLocation(0, tt_ev->dest_loc);
+        idToLocation(0, 0, tt_ev->dest_loc);
     } else {
         int rtr_id = get_dest_router(tt_ev->getDest());
-        idToLocation(rtr_id, tt_ev->dest_loc);
+        idToLocation(hm_id, rtr_id, tt_ev->dest_loc);
     }
     return tt_ev;
 }
@@ -237,7 +244,7 @@ topo_mesh::getPortState(int port) const
     return R2R;
 }
 
-//根据din_size数组的范围确定location数组
+//根据dim_size数组的范围确定location数组
 void idToLocation(int hm_id, int run_id, int *location) {
     // 根据 hm_id 计算 location 数组的后两位
     location[dimensions - 2] = (hm_id % dim_size[dimensions - 2]);
@@ -270,8 +277,9 @@ topo_mesh::parseDimString(const std::string &shape, int *output) const
 }
 
 
-//新添了一个hm_id参数
-int
+//新添了一个hm_id参数,通过网卡id——dest_id，获取到网卡所在的路由器id，网卡id和路由器的id有关
+//由于mesh结构可以考路由器id唯一标识一个路由器，但是hm结构不仅需要一个路由器id还需要一个hm_id
+int*
 topo_mesh::get_dest_router(int hm_id, int dest_id) const
 {
     return dest_id / num_local_ports;
