@@ -29,13 +29,14 @@
 
 namespace SST {
 namespace Merlin {
-
+//专门用于处理mesh（现在被我改为hm）内部路由的函数
 class topo_mesh_event : public internal_router_event {
 public:
     //事件的初始化新添一个hm_id参数
-    int* hm_id;
-    int dimensions;
-    int routing_dim;
+    int hm_id;
+    int dimensions;//现在这个dimensions规定了为固定值4
+    int routing_dim;//路由的维度，可以理解为先遍历a,b维度,然后再遍历x,y维度
+    //这个dest_loc是一个int型数组，用于表示目标路由器的位置
     int* dest_loc;
 
     topo_mesh_event() {}
@@ -112,8 +113,9 @@ public:
 
     SST_ELI_DOCUMENT_PARAMS(
         // Parameters needed for use with old merlin python module
-        {"mesh.shape", "Shape of the mesh specified as the number of routers in each dimension, where each dimension "
-                       "is separated by a colon.  For example, 4x4x2x2.  Any number of dimensions is supported."},
+        //mesh.shape接受四个参数，4x4x2x2代表它由2x2个4x4的二维mesh拓扑组成
+        {"mesh.shape", "The parameter mesh.shape accepts four arguments, with 4x4x2x2 indicating that it is composed of 2x2  "
+                       "two-dimensional meshes, each with a topology of 4x4."},
         {"mesh.width", "Number of links between routers in each dimension, specified in same manner as for shape.  For "
                        "example, 2x2x1 denotes 2 links in the x and y dimensions and one in the z dimension."},
         {"mesh.local_ports", "Number of endpoints attached to each router."},
@@ -128,12 +130,20 @@ public:
 
 
 private:
-    //新添一个hm_id数组参数
-    int* hm_id;
+    //定义一个结构体DestInfo,一个路由器在拓扑中的位置由DestInfo中的两个变量唯一确定
+    struct DestInfo{
+       int hm_id;//hm板子id
+       int router_id;//板子内部路由器的id
+    }
+    //新添一个hm_id数组参数,通过hm_id解析出hm板子在拓扑中的位置
+    int hm_id;
+    //router_id保持不变，通过router_id可以解析出hm板子内部路由器的位置
     int router_id;
+    //即可能id_loc=[1,1,1,0]
     int* id_loc;
 
-    int dimensions;//由于HammingMesh默认是二维结构，所以不需要提供维度的参数
+    int dimensions=4;//由于Hammingmesh由四个参数构成拓扑形装，所以我们默认dimensions为4
+    //若字符串为"4x4x2x2"，则解析出来的dim_size数组为[4,4,2,2]
     int* dim_size;
     int* dim_width;
 
@@ -146,7 +156,7 @@ private:
     
 public:
     //初始化需要多接受hm_id参数，这四个参数可以唯一确定路由器的位置
-    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns,int* hm_id);
+    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns,int hm_id);
     ~topo_mesh();
 
     virtual void route_packet(int port, int vc, internal_router_event* ev);
@@ -165,13 +175,17 @@ public:
     }
     
 protected:
+    //这个函数只是进行了定义，具体在mesh.cc文件里面实现
     virtual int choose_multipath(int start_port, int num_ports, int dest_dist);
 
 private:
-    void idToLocation(int id, int *location) const;
+    //在定义中新添了一个hm_id参数
+    void idToLocation(int hm_id, int id, int *location) const;
     void parseDimString(const std::string &shape, int *output) const;
-    int get_dest_router(int dest_id) const;
-    int get_dest_local_port(int dest_id) const;
+    //目的路由位置的获取函数，添加了一个新的hm_id参数，所以返回值要设置为一个数组
+    //将原来的int型函数改为int*指针型数组
+    int* get_dest_router(int hm_id, int dest_id) const;
+    int* get_dest_local_port(int dest_id) const;
 
 
 };
