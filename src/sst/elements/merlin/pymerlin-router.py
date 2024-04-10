@@ -21,7 +21,9 @@ from sst.merlin.base import *
 
 class hr_router(RouterTemplate):
     def __init__(self):
+        #调用父类RouterTemplate的构造函数来初始化hr_router类的实例
         RouterTemplate.__init__(self)
+        #声明了一系列的参数，比如link_bw()
         self._declareParams("params",["link_bw","flit_size","xbar_bw","input_latency","output_latency","input_buf_size","output_buf_size",
                                       "xbar_arb","network_inspectors","oql_track_port","oql_track_remote","num_vns","vn_remap","vn_remap_shm"])
 
