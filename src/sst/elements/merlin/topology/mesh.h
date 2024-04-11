@@ -129,6 +129,7 @@ public:
         {"mesh.width", "Number of links between routers in each dimension, specified in same manner as for shape.  For "
                        "example, 2x2 denotes 2 links in the x and y dimensions."},
         {"mesh.local_ports", "Number of endpoints attached to each router."},
+        
 
 
         {"shape", "Shape of the mesh specified as the number of routers in each dimension, where each dimension is "
@@ -147,6 +148,8 @@ private:
     int* id_loc;
     //新添一个hm_id数组参数,通过hm_id解析出hm板子在拓扑中的位置
     int hm_id;//【新加】
+    //为每个路由器添加一个存储当前维度的行和列交换机的信息
+    int (* switches)[2];
 
     int dimensions=4;//由于Hammingmesh由四个参数构成拓扑形装，所以我们默认dimensions为4
     //若字符串为"4x4x2x2"，则解析出来的dim_size数组为[4,4,2,2]
@@ -198,6 +201,8 @@ private:
     int get_dest_local_port(int dest_id) const;
     //用于获取目的路由器所在的hm_id
     int get_dest_hm(int dest_id) const;//【新加】
+    //用于获取目的路由器的行列交换机信息
+    int get_dest_switches(int dest_id) const;//【新加】
 
 
 };
