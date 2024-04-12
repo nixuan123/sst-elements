@@ -31,7 +31,8 @@ namespace Merlin {
 class topo_fattree: public Topology {
 
 public:
-
+    //使用SST的ELI（Element Library Interface）系统进行注册
+    //这意味着它可以被SST框架识别和使用
     SST_ELI_REGISTER_SUBCOMPONENT(
         topo_fattree,
         "merlin",
@@ -40,7 +41,7 @@ public:
         "Fattree topology object",
         SST::Merlin::Topology
     )
-
+    //使用SST的ELI（Element Library Interface）系统进行文档化
     SST_ELI_DOCUMENT_PARAMS(
         // Parameters needed for use with old merlin python module
         {"fattree.shape",               "Shape of the fattree"},
@@ -51,36 +52,48 @@ public:
         {"routing_alg",         "Routing algorithm to use. [deterministic | adaptive]","deterministic"},
         {"adaptive_threshold",  "Threshold used to determine if a packet will adaptively route."}
     )
+//fattree.shape指的是Fattree拓扑的形装，这个参数定义了网格的层次结构，通常是一个三元组(b、k、h)
+//其中b是每个父节点下的子节点数，k是网络的根层级数，h是叶节点层级数
 
+//fattree.routing_alg使用的路由算法，这个参数有两个可选值：一个是确定性还有一个是自适应。确定性意味
+//着每个数据包都遵循固定的路径，而自适应路由允许数据包根据网络状况选择不同的路径
 
+//adaptive_threshold:自适应路由中使用的阈值，当网络拥塞超过这个阈值时，数据包会选择不同于
+//默认路径的路由
+
+//同样的参数也被定义在另一组中，但是没有前缀"fattree."。这可能是为了向后兼容旧版本的Merlin Python模块，
+//允许用户使用不带前缀的参数名称来配置拓扑。
 private:
-    int rtr_level;
-    int level_id;
-    int level_group;
+    int rtr_level;//表示当前路由器在fattree拓扑中的层级，在fattree结构中，根节点位于顶层，叶子节点位于底层，中间的层级包含交换机或者路由器
+    int level_id;//用于标识当前路由器在其所在层级中的唯一ID
+    int level_group;//用于标识当前路由器所属的层级组，这在多根或者分层的Fattree变体中特别有用
 
-    int high_host;
-    int low_host;
+    ////当前路由器连接的主机范围
+    int high_host;//最高编主机号
+    int low_host;//最低编主机号
 
-    int down_route_factor;
+    int down_route_factor;//计算向下路由(从当前层级到下一层级)的因子，这可能于端口分配或路由策略有关
 
 //    int levels;
-    int id;
-    int up_ports;
-    int down_ports;
-    int num_ports;
-    int num_vns;
-    int num_vcs;
+    int id;//当前路由器的唯一标识符
+    int up_ports;//当前路由器向上的接口数量
+    int down_ports;//当前路由器向下的接口数量
+    int num_ports;//当前路由器总的端口数量
+    int num_vns;//虚拟网络的数量
+    int num_vcs;//虚拟通道的数量
 
-    int const* outputCredits;
-    int* thresholds;
-    double adaptive_threshold;
+    int const* outputCredits;//指向一个整数数组的指针，用于存储当前路由器的输出信用值。在模拟器中，通常用于控制流量和避免拥塞
+    int* thresholds;//用于存储当前路由器的阈值，用于决定何时激活自适应路由或其他网络策略
+    double adaptive_threshold;//自适应路由的阈值，当网络条件达到或超过这个阈值时，路由器可能会改变其路由行为
 
+    //一个结构体，用于存储有关虚拟网络的信息，包括起始虚拟通道号（start_vc）
+    //虚拟通道数量(num_vcs)和是否允许自适应路由(allow_adaptive)
     struct vn_info {
         int start_vc;
         int num_vcs;
         bool allow_adaptive;
     };
-
+    //该结构体用于存储所有虚拟网络的信息
     vn_info* vns;
 
     void parseShape(const std::string &shape, int *downs, int *ups) const;
