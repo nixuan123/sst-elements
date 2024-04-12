@@ -361,12 +361,20 @@ topo_mesh::get_dest_local_port(int dest_id) const
 {
     return local_port_start + (dest_id % num_local_ports);
 }
-//【新增】
+//【新增】获取目的节点id的hm_id
 int
 topo_mesh::get_dest_hm(int dest_id) const
 {
 	return dest_id / num_local_ports / (dim_size[0]*dim_size[1])
 }
+
+//【新增】获取目的节点的行列交换机的信息
+int
+topo_mesh::get_dest_switch(int dest_id) const
+{
+	return dest_id / num_local_ports / (dim_size[0]*dim_size[1])
+}
+
 
 //这个函数是已经确定在相同的hm_id板子上进行路由选择，后面我还需要定义一个
 //在不同hm板上进行路由选择的函数
