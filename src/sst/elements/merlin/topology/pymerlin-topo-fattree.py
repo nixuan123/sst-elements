@@ -103,17 +103,18 @@ class topoFatTree(Topology):
             self._groups_per_level[i] = self._groups_per_level[i-1] // self._downs[i]
 
         
-
+    #获取拓扑的名称
     def getName(self):
         return "Fat Tree"
 
 
-
+    #获取总主机数
     def getNumNodes(self):
         return self._total_hosts
 
     
     def getRouterNameForId(self,rtr_id):
+        #获取start_ids列表的长度，并将其赋值给num_levels
         num_levels = len(self._start_ids)
 
         # Check to make sure the index is in range
@@ -188,36 +189,67 @@ class topoFatTree(Topology):
                     #主机id = 1 * 2 + 0 = 2
                     node_id = id * self._downs[0] + i
                     #print("group: %d, id: %d, node_id: %d"%(group, id, node_id))
+                    #调用build方法来构建一个节点，并返回一个包含节点对象的端口名称的元组
                     (ep, port_name) = endpoint.build(node_id, {})
+                    #检查节点对象ep是否存在
                     if ep:
+                        #创建一个新的连接主机的链接对象hlink,并使用主机ID作为标识
                         hlink = sst.Link("hostlink_%d"%node_id)
+                        
+                        #检查是否需要将连接标记为不可切断
                         if self.bundleEndpoints:
                            hlink.setNoCut()
+                        
+                        #将链接添加到节点，并指定端口名称和主机链路延迟
                         ep.addLink(hlink, port_name, self.host_link_latency)
+                        
+                        #将创建的链接添加到主机链路字典 host_links 中
                         host_links.append(hlink)
 
                 # Create the edge router
+                #记录当前路由器的ID
                 rtr_id = id
+                #创建一个接入层的路由器实例
                 rtr = self._instanceRouter(self._ups[0] + self._downs[0], rtr_id)
-                
+
+                #为这个创建好的实例添加一个fattree拓扑
                 topology = rtr.setSubComponent(self.router.getTopologySlotName(),"merlin.fattree")
+
+                #应用统计设置到拓扑
                 self._applyStatisticsSettings(topology)
+
+                #为拓扑添加主要参数
                 topology.addParams(self._getGroupParams("main"))
+                
                 # Add links
+                #为接入层路由器添加主机链路到,host_links字典的长度为该路由器的下行端口数
+                #也即该路由器所连接的主机数量
                 for l in range(len(host_links)):
                     rtr.addLink(host_links[l],"port%d"%l, self.link_latency)
+                
+                #为接入层路由器添加路由器链接，links数组存储了当前层级(接入层)的上、下行链路数
                 for l in range(len(links)):
                     rtr.addLink(links[l],"port%d"%(l+self._downs[0]), self.link_latency)
                 return
 
+            #处理非接入层的情况
+            
+            #计算每个组中的路由器数量
             rtrs_in_group = self._routers_per_level[level] // self._groups_per_level[level]
+            
             # Create the down links for the routers
+            #创建一个列表，包含了rtrs_in_group个空列表，用于存储该组所有路由器的组间的连接
             rtr_links = [ [] for index in range(rtrs_in_group) ]
+            
+            #循环创建组间连接，并存储在group_links列表中
             for i in range(rtrs_in_group):
+                #循环遍历非接入层的下行端口，组间连接
                 for j in range(self._downs[level]):
+                    #循环遍历组中的路由器并为其添加下行链路，也叫组间连接
                     rtr_links[i].append(sst.Link("link_l%d_g%d_r%d_p%d"%(level,group,i,j)));
 
             # Now create group links to pass to lower level groups from router down links
+            # 创建一个列表，包含了当前路由器下行端口数量个空列表，用于存储当前路由器的特定下行端口组间的连接
             group_links = [ [] for index in range(self._downs[level]) ]
             for i in range(self._downs[level]):
                 for j in range(rtrs_in_group):
