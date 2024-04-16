@@ -72,12 +72,12 @@ private:
     int high_host;//最高编主机号
     int low_host;//最低编主机号
 
-    int down_route_factor;//计算向下路由(从当前层级到下一层级)的因子，这可能于端口分配或路由策略有关
+    int down_route_factor;//当前路由器可以下行到主机的链路数量
 
 //    int levels;
     int id;//当前路由器的唯一标识符
-    int up_ports;//上行端口数
-    int down_ports;//下行端口数
+    int up_ports;//当前路由器的上行端口数量
+    int down_ports;//当前路由器的下行端口数量
     int num_ports;//当前路由器总的端口数量
     int num_vns;//虚拟网络的数量
     int num_vcs;//虚拟通道的数量
