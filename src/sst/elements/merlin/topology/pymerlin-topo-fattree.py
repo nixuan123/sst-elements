@@ -48,15 +48,16 @@ class topoFatTree(Topology):
         # Process the shape
         self._ups = []
         self._downs = []
-        self._routers_per_level = []
+        self._routers_per_level = []#每个层级的路由器数量
         self._groups_per_level = []#每层组数量
         self._start_ids = []#每层的起始ID
 
-        #若shape是"4:2:1",则解析之后levels将为[4,2,1]
+        #若shape是"2,2:2,2:4",则解析之后levels将为[[2,2],[2,2],4]
         levels = shape.split(":")
 
         #处理逐个层级的链路信息，即上行链路和下行链路的总数
         for l in levels:
+            #比如现在是第一个层级，links=[2,2]
             links = l.split(",")
             #将links数组中第一个元素(下行链路数)转换为整数，并将其追加到self._downs列表中
             self._downs.append(int(links[0]))
@@ -64,41 +65,43 @@ class topoFatTree(Topology):
             if len(links) > 1:
                 # #将links数组中第二个元素(上行链路数)转换为整数，并将其追加到self._ups列表中
                 self._ups.append(int(links[1]))
+        此时_downs=[2,2,2],ups=[2,2,0]
         
         #计算胖树拓扑的主机数量，不同层级(从接入层/第0层开始)单个路由器的下行端口数量累乘得到
         self._total_hosts = 1
         for i in self._downs:
             self._total_hosts *= i
 
-        #用于存储每一个层级的路由器数量，使用列表推导式创建了一个新列表，其长度和
-        #每层单个路由器的下行端口数量
         #因此，_routers_per_level列表将为拓扑中的每个层级预留一个位置，
-        #用于存储该层级的路由器数量。
+        #用于存储不同层级的路由器数量。
         self._routers_per_level = [0] * len(self._downs)
-        #接入层(第0层)的路由器的数量 = 拓扑的主机数量 // 接入层的单个路由器下行端口数量
+        
+        #接入层(第0层)的路由器的数量 
         #例如 一个[4,4:4,4:8] 的fattree拓扑 8 // 2 = 4
         self._routers_per_level[0] = self._total_hosts // self._downs[0]
-        #遍历非接入层，从1遍历到层级数-1
+        
+        #接着往上遍历非接入层，从1遍历到_downs数组的长度-1
         for i in range(1,len(self._downs)):
             self._routers_per_level[i] = self._routers_per_level[i-1] * self._ups[i-1] // self._downs[i]
         
-        #初始化一个_start_ids字典，字典长度为层级数
+        #初始化一个_start_ids字典,用于记录每个层级的起始路由器id,字典长度为_downs数组的长度
         self._start_ids = [0] * len(self._downs)
+        
         #起始路由器id从0开始，位于接入层的最左边，然后逐1递增
         for i in range(1,len(self._downs)):
             self._start_ids[i] = self._start_ids[i-1] + self._routers_per_level[i-1]
 
-        #计算fattree拓扑中每一层的组数量。这里的组指的是一组路由器，它们
-        #共同服务于一定范围内的主机或下一层的设备
-        #初始化为1，意味着如果self._downs列表中的每个元素代表一个层级
-        #那么初始化时，每个层级被假设为只有一个组
+        #对于k=4的fattree(或者说[2,2:2,2:4])，上面_start_ids=[0,8,16]
+        
+        #将每个层级的组数初始化为1
         self._groups_per_level = [1] * len(self._downs);
-        #判断上行端口数组是否为空，如果不为空，则说明拓扑中存在多个层级，而不仅仅是单一层级
+        
+        #如果上行端口数组为空，说明是单个路由器构成的胖树，本身就是接入层的路由器
         if self._ups: # if ups is empty, then this is a single level and the following line will fail
-            #计算接入层的组数量，即用总主机数整除下行端口数量，结果被赋值给
-            #_group_per_level列表的第一个元素，即接入层的组数量
+            #将第0层的路由器数量设置为主机数量除以下行端口数量,为1
             self._groups_per_level[0] = self._total_hosts // self._downs[0]
-
+        
+        #如果上行端口数组不为空，计算其他层级的路由器数量信息
         for i in range(1,len(self._downs)-1):
             self._groups_per_level[i] = self._groups_per_level[i-1] // self._downs[i]
 
@@ -112,36 +115,34 @@ class topoFatTree(Topology):
     def getNumNodes(self):
         return self._total_hosts
 
-    
+    #给拓扑中的路由器通过路由器id进行命名
     def getRouterNameForId(self,rtr_id):
-        #获取start_ids列表的长度，并将其赋值给num_levels
+        #获取start_ids列表的长度，并将其赋值给num_levels，用于记录当前拓扑的层级数
         num_levels = len(self._start_ids)
 
         # Check to make sure the index is in range
-        #检查给定的路由器ID(rtr_id)在Fattree拓扑中是否有效
-        #level被赋值为根层的路由器的层级(num_level-1)
+        #level层级赋值为顶层
         level = num_levels - 1
-        #如果路由器的id大于等于(根路由器id+根层的路由器数量)或者小于0
-        #就会打印报错信息，因为根层最右的id是拓扑中最大的
+
+        #如果当前路由器id大于胖树拓扑中顶层最右边的路由器id或者说小于0，则报错
         if rtr_id >= (self._start_ids[level] + self._routers_per_level[level]) or rtr_id < 0:
             print("ERROR: topoFattree.getRouterNameForId: rtr_id not found: %d"%rtr_id)
             sst.exit()
 
         # Find the level
-        #根据给定的路由器id找寻它所在的层级，从根层开始找
+        #循环从num_levels-1开始到0(不包括0)结束，递减频率为1
         for x in range(num_levels-1,0,-1):
-            #如果路由器id大于等于该层的起始id，则找到了
+            #如果路由器id大于等于该层的起始id，则路由器位于当前层级
             if rtr_id >= self._start_ids[x]:
-                break
+                break#跳出for循环，level变量的值即为路由器位于的层级
             #否则层级递减
             level = level - 1
 
         # Find the group
-        #之前已经算出该路由器所在层级，现在根据给定的路由器ID确定该路由器所在的组和路由器在组中的位置
-        #代表当前路由器在该层级的偏移量，从左至右
+        #之前已经算出该路由器所在层级 level，现在算路由器在组内的偏移量
         remainder = rtr_id - self._start_ids[level]
         
-        #计算每个组中的路由器数量，当前层级的路由器数量整除组数量
+        #计算每个组中的路由器数量
         routers_per_group = self._routers_per_level[level] // self._groups_per_level[level]
         
         #计算当前路由器所在组的组号
