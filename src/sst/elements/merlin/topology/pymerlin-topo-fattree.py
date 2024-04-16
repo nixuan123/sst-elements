@@ -190,7 +190,8 @@ class topoFatTree(Topology):
                     
                     #调用build方法来构建一个节点，主机编号为node_id
                     (ep, port_name) = endpoint.build(node_id, {})
-                    #检查节点对象ep是否存在
+                    
+                    #如果节点创建成功，开始为节点分配链接
                     if ep:
                         #创建一个新的连接主机的链接对象hlink,并使用主机ID作为标识
                         hlink = sst.Link("hostlink_%d"%node_id)
@@ -221,55 +222,67 @@ class topoFatTree(Topology):
                 topology.addParams(self._getGroupParams("main"))
                 
                 # Add links
-                #为接入层路由器添加主机链路到,host_links字典的长度为该路由器的下行端口数
-                #也即该路由器所连接的主机数量
+                #将之前创建好的链路以及链路信息添加到当前的接入层rtr路由器中，处理R2N链路
                 for l in range(len(host_links)):
                     rtr.addLink(host_links[l],"port%d"%l, self.link_latency)
                 
-                #为接入层路由器添加路由器链接，links数组存储了当前层级(接入层)的上、下行链路数
+                #为接入层路由器添加路由器链接，links数组存储了当前层级(接入层)的上、下行链路数，处理R2R链路
                 for l in range(len(links)):
                     rtr.addLink(links[l],"port%d"%(l+self._downs[0]), self.link_latency)
                 return
 
-            #处理非接入层的情况
+            #处理非接入层的情况，非接入层的链路都是R2R
             
             #计算每个组中的路由器数量
             rtrs_in_group = self._routers_per_level[level] // self._groups_per_level[level]
             
             # Create the down links for the routers
-            #创建一个列表，包含了rtrs_in_group个空列表，用于存储该组所有路由器的组间的连接
+            #为当前路由器创建下行链路
             rtr_links = [ [] for index in range(rtrs_in_group) ]
             
             #循环创建组间连接，并存储在group_links列表中
             for i in range(rtrs_in_group):
                 #循环遍历非接入层的下行端口，组间连接
                 for j in range(self._downs[level]):
-                    #循环遍历组中的路由器并为其添加下行链路，也叫组间连接
+                    #循环遍历组中的路由器并为其添加下行链路，l-层级 g-组号 r-偏移量 p-端口号
                     rtr_links[i].append(sst.Link("link_l%d_g%d_r%d_p%d"%(level,group,i,j)));
 
+            #上面for循环之后，对于k=4，id=8的路由器来说，rtr_links=[[link_l1_g0_r0_p0,link_l1_g0_r0_p1],[link_l1_g0_r1_p0,link_l1_g0_r1_p1]]
+
             # Now create group links to pass to lower level groups from router down links
-            # 创建一个列表，包含了当前路由器下行端口数量个空列表，用于存储当前路由器的特定下行端口组间的连接
+            #这个数组存储的是组连接，它是R2R连接，相当于同组中相同端口号的连接的集合
             group_links = [ [] for index in range(self._downs[level]) ]
             for i in range(self._downs[level]):
                 for j in range(rtrs_in_group):
                     group_links[i].append(rtr_links[j][i])
+            
+            #上面for循环之后，对于k=4，id=8的路由器来说，group_links=[[link_l1_g0_r0_p0,link_l1_g0_r1_p0],[link_l1_g0_r0_p1,link_l1_g0_r1_p1]]
 
+            #构建当前路由器下行端口数量的路由器的拓扑
             for i in range(self._downs[level]):
                 fattree_rb(self,level-1,group*self._downs[level]+i,group_links[i])
 
             # Create the routers in this level.
-            # Start by adding up links to rtr_links
+            # Start by adding up links to rtr_links,接着向rtr_links列表中添加上行链路信息
+            
             for i in range(len(links)):
                 rtr_links[i % rtrs_in_group].append(links[i])
 
             for i in range(rtrs_in_group):
                 rtr_id = id + i
                 rtr = self._instanceRouter(self._ups[level] + self._downs[level], rtr_id)
-
+                
+                #定义路由器的拓扑插槽名称，它是属于fattree类型的
                 topology = rtr.setSubComponent(self.router.getTopologySlotName(),"merlin.fattree")
+                
+                #应用统计设置到拓扑组件上，为了收集和分析网络性能数据
                 self._applyStatisticsSettings(topology)
+
+                #添加一组参数到拓扑组件中，包括网络特定的配置，比如带宽、延迟等
                 topology.addParams(self._getGroupParams("main"))
+                
                 # Add links
+                #将每条链路添加到路由器上
                 for l in range(len(rtr_links[i])):
                     rtr.addLink(rtr_links[i][l],"port%d"%l, self.link_latency)
         #  End recursive function
@@ -307,7 +320,8 @@ class topoFatTree(Topology):
 
                 for l in range(len(rtr_links[i])):
                     rtr.addLink(rtr_links[i][l], "port%d"%l, self.link_latency)
-
+        
+        #单个路由器的情况
         else: # Single level case
             # create all the nodes
             for i in range(self._downs[0]):
