@@ -30,8 +30,10 @@ topo_fattree::parseShape(const std::string &shape, int *downs, int *ups) const
     size_t start = 0;//记录当前字符串的起始位置
     size_t end = 0;//记录当前字符串的结束位置
     //计算字符串shape中冒号":"的数量，比如[4,4:4,4:8]有两个冒号，层级就是3
+    //levels=[4,4:4,4:8],说明胖树为k=8的结构，每个路由器的上下行端口数都为4
     int levels = std::count(shape.begin(), shape.end(), ':') + 1;
     //开始一个循环，迭代每一层级
+    //从层级为0(接入层)开始遍历
     for ( int i = 0; i < levels; i++ ) {
         寻找下一个冒号的位置，更新变量
         end = shape.find(':',start);
@@ -45,6 +47,7 @@ topo_fattree::parseShape(const std::string &shape, int *downs, int *ups) const
         string down;//存储下行端口的数量
         string up;//存储上行端口的数量
         //若没有找到","，则说明该层级只有下行端口的信息，没有上行端口的信息
+        //说明已经遍历到了最高层根层/核心层
         if ( comma == string::npos ) {
             down = sub;//将sub字符串赋值给down，表示下行端口的数量
             up = "0";//上行端口数为0
@@ -56,6 +59,8 @@ topo_fattree::parseShape(const std::string &shape, int *downs, int *ups) const
         }
         //使用strtol函数将down和up的字符串值转换为整数，并存储在downs和ups
         //数组的相应位置，注意downs和ups数组是从胖树的第0层交换机开始计数的
+        //若现在是在遍历接入层downs[0]=4,up[0]=4,同理汇聚层downs[1]=4,ups[1]=4
+        //downs[2]=8,ups[2]=0
         downs[i] = strtol(down.c_str(), NULL, 0);
         ups[i] = strtol(up.c_str(), NULL, 0);
 
@@ -129,9 +134,10 @@ topo_fattree::topo_fattree(ComponentId_t cid, Params& params, int num_ports, int
     //或者超过这个阈值时，路由器会从确定性路由切换到自适应路由
     adaptive_threshold = params.find<double>("adaptive_threshold", 0.5);
 
-    //计算冒号的数量从而得到胖树拓扑的层级数
+    //计算冒号的数量从而得到胖树拓扑的层级数,一般都为3层
     int levels = std::count(shape.begin(), shape.end(), ':') + 1;
-    //定义不同层级的路由器的上、下行端口数量数组
+    //定义存储不同层级的路由器的上、下行端口数量数组
+    //比如ups=[4,4,0] downs=[4,4,8]
     int* ups = new int[levels];
     int* downs= new int[levels];
 
@@ -145,7 +151,7 @@ topo_fattree::topo_fattree(ComponentId_t cid, Params& params, int num_ports, int
         //每个层级的路由器下行端口数量相乘得到总的主机数(最后叶子节点的数量)
         total_hosts *= downs[i];
     }
-    //计算拓扑中每一层的拓扑数量，计算基于已经确定的总主机数和每层路由器中的上、下行端口数
+    //计算拓扑中每一层的路由器数量，计算基于已经确定的总主机数和每层路由器中的上、下行端口数
     int* routers_per_level = new int[levels];//用于存储每一个层级的路由器数量
     routers_per_level[0] = total_hosts / downs[0];//算出第一层(数组下标为0)的路由器数量
 
@@ -153,20 +159,23 @@ topo_fattree::topo_fattree(ComponentId_t cid, Params& params, int num_ports, int
     for ( int i = 1; i < levels; i++ ) {
         routers_per_level[i] = routers_per_level[i-1] * ups[i-1] / downs[i];
     }
+
+    //假设（k=4） 则最后routers_per_level=[8,8,4]
+    
     //确定fattree拓扑中特定路由器的位置，包括它所在的层级、层内ID以及层组ID
     int count = 0;//这个参数用于确定 已经遍历过的路由器数量
     rtr_level = -1;//这个用于存储 当前路由器 所在的层级。初始值设置为-1，表示还没有确定层级
     int routers_per_level_group = 1;//用于存储每一层 路由器组 的数量
     
     for ( int i = 0; i < levels; i++ ) {
-        //计算当前层级中路由器的局部ID(lid),与mesh不同，mesh中还是叫rtr_id.
+        //计算当前层级中路由器的局部ID(lid),id表示当前路由器的id，与mesh不同，mesh中还是叫rtr_id.
         int lid = id - count;
         //更新count变量，增加当前层级的路由器数量，
         count += routers_per_level[i];
-        //如果当前路由器ID小于更新后的count，意味着当前路由器位于当前层级或更高层级中
+        //如果当前路由器ID小于更新后的count，意味着当前路由器位于i层
         if ( id < count ) {
             rtr_level = i;//设置rtr_level为当前层级 i
-            level_id = lid;//将局部id赋值给level_id
+            level_id = lid;//将局部id赋值给level_i变量
             //level_group(组id)
             level_group = lid / routers_per_level_group;
             //跳出循环，因为找到了路由器所在的层级
@@ -174,7 +183,7 @@ topo_fattree::topo_fattree(ComponentId_t cid, Params& params, int num_ports, int
         }
         routers_per_level_group *= ups[i];
     }
-    //在Fattree拓扑中计算特定路由器的端口信息和可到达的主机ID范围
+    //在Fattree拓扑中计算当前路由器的端口数量和可到达的主机ID范围
     down_ports = downs[rtr_level];//将当前路由器在rtr_level层级的下行端口数赋值给down_ports变量
     up_ports = ups[rtr_level];//将..上行...up_ports变量
     
@@ -183,14 +192,16 @@ topo_fattree::topo_fattree(ComponentId_t cid, Params& params, int num_ports, int
     int rid = 1;
     //通过一个for循环来计算从第一层(下标为0)到当前层级(rtr_level)
     //累乘的结果表示的是当前路由器可以到达的下游主机数量(叶子节点)
+    //比如对于k=4的胖树中的路由器id=8的路由器来说，rid的结果为2*2=4
     for ( int i = 0; i <= rtr_level; i++ ) {
         rid *= downs[i];
     }
-    //计算当前路由器的下行路由因子
+    //计算当前路由器的下行链路数，当k=4时，对于rid=8的路由器来说
+    //down_router_factor= 4 / 2 = 2
     down_route_factor = rid / downs[rtr_level];
 
     //计算当前路由器组中最低的主机或路由器ID，level_group是当前路由器所在的
-    //层组ID，rid是从根节点到当前路由器路径上所有可能是分支数量
+    //层组ID，rid是当前路由器通过下行链路可以到达的最大主机数量
     low_host = level_group * rid;
     //rid-1表示当前层组中的节点数量，将这个值加到low_host上得到当前层组中最高
     //的可到达ID
@@ -340,25 +351,26 @@ internal_router_event* topo_fattree::process_UntimedData_input(RtrEvent* ev)
     return new internal_router_event(ev);
 }
 
-//接受一个整数参数，返回对应的主机(终端设备)ID
-//low_host是当前路由器可以到达的最小主机ID，而port是当前路由器上
-//的端口号，端口号是从0开始的，所以port实际上表示从low_host开始
-//的第port个设备
+//获取当前路由器不同下行端口号所对应的主机ID
+//通过当前路由器所能到达的最小主机ID+端口号来获取
 int
 topo_fattree::getEndpointID(int port)
 {
     return low_host + port;
 }
 
-//返回给定端口的连接状态
+//返回当前路由器端口的连接状态
 Topology::PortState topo_fattree::getPortState(int port) const
 {
-    //
+    //如果当前路由器在接入层
     if ( rtr_level == 0 ) {
+        //说明是接入层的下行端口
         if ( port < down_ports ) return R2N;
-        else if ( port >= down_ports ) return R2R;
-        else return UNCONNECTED;
-    } else {
+        else if ( port >= down_ports ) return R2R;//说明是接入层的上行端口
+        else return UNCONNECTED;//单个节点(k=1的胖树),无任何连接
+    } 
+    //非接入层都是R2R
+    else {
         return R2R;
     }
 }
