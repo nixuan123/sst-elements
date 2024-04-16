@@ -65,10 +65,10 @@ public:
 //允许用户使用不带前缀的参数名称来配置拓扑。
 private:
     int rtr_level;//表示当前路由器在fattree拓扑中的层级，在fattree结构中，根节点位于顶层，叶子节点位于底层，中间的层级包含交换机或者路由器
-    int level_id;//用于标识当前路由器在其所在层级中的唯一ID
-    int level_group;//用于标识当前路由器所属的层级组，这在多根或者分层的Fattree变体中特别有用
-
-    ////当前路由器连接的主机范围
+    int level_id;//路由器的组ID
+    int level_group;//路由器所在组的组号
+    
+    //当前路由器能通过下行链路到达的主机范围
     int high_host;//最高编主机号
     int low_host;//最低编主机号
 
