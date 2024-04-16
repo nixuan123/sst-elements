@@ -165,17 +165,15 @@ class topoFatTree(Topology):
     
     
     def _build_impl(self, endpoint):
-        #检查host_link_latency属性是否存在，如果不存在，着意味着没有为
         #主机链路延迟单独设置值
         if not self.host_link_latency:
-            #将其设置为link_latency的值
+            #如果没有设置就将其设置为link_latency的值
             self.host_link_latency = self.link_latency
         
         #Recursive function to build levels
-        #递归函数构建拓扑的各个层级
+        #采用一个递归函数fattree_rb构建整个拓扑
         def fattree_rb(self, level, group, links):
-            #计算当前路由器的组内第一个路由器的id，通过该层的起始id和路由器所在组号和每个组路由器数量确定
-            #假设当前路由器ID=4，location=[1,0,0],下面的id变量=4
+            #假设构建一个level层级的胖树
             id = self._start_ids[level] + group * (self._routers_per_level[level]//self._groups_per_level[level])
 
             #初始化一个空字典，用于存储主机链路
@@ -184,13 +182,13 @@ class topoFatTree(Topology):
             #检查当前路由器是否在接入层
             if level == 0:
                 # create all the nodes
-                #在接入层的情况下，循环创建主机，循环从0开始到(下行端口数量-1)结束
-                #假设当前的路由器ID=1 ，location=[0,1,0]
+                #在接入层的情况下创建该路由器的所有的主机节点
                 for i in range(self._downs[0]):
-                    #主机id = 1 * 2 + 0 = 2
+                    #为该路由器连接的第一个主机编号
                     node_id = id * self._downs[0] + i
                     #print("group: %d, id: %d, node_id: %d"%(group, id, node_id))
-                    #调用build方法来构建一个节点，并返回一个包含节点对象的端口名称的元组
+                    
+                    #调用build方法来构建一个节点，主机编号为node_id
                     (ep, port_name) = endpoint.build(node_id, {})
                     #检查节点对象ep是否存在
                     if ep:
@@ -201,7 +199,7 @@ class topoFatTree(Topology):
                         if self.bundleEndpoints:
                            hlink.setNoCut()
                         
-                        #将链接添加到节点，并指定端口名称和主机链路延迟
+                        #将链接添加到主机节点
                         ep.addLink(hlink, port_name, self.host_link_latency)
                         
                         #将创建的链接添加到主机链路字典 host_links 中
