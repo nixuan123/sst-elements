@@ -24,7 +24,7 @@ class _topoMeshBase(Topology):
     def __init__(self):
         #父类Topology的构造参数，初始化继承Topology的属性和方法
         Topology.__init__(self)
-        #_declareClassVariables是一个类方法，用于声明类的实例变量
+        #_declareClassVariables是一个类方法，用于声明类的实例变量【新增_hm_id】
         self._declareClassVariables(["link_latency","host_link_latency","bundleEndpoints","_num_dims","_dim_size","_dim_width"])
         #_declareParams用于声明类的参数，这些参数可以在类的实例化时设置
         self._declareParams("main",["shape", "width", "local_ports"])
@@ -57,20 +57,22 @@ class _topoMeshBase(Topology):
             shape = self.shape
             width = value
             
-        # Get the size in dimension通过shape字符串获取mesh的维度数组【4，4】
+        # Get the size in dimension通过shape字符串获取mesh的维度数组[2,2,2,2]
         self._dim_size = [int(x) for x in shape.split('x')]
 
         # Get the number of links in each dimension and check to
-        # make sure the number of dimensions matches the shape【3，3】
+        # make sure the number of dimensions matches the shape[1,1]
         self._dim_width = [int(x) for x in width.split('x')]
 
-        #获取mesh的维度【2】
+        #获取mesh的维度【4】固定值为4
         self._num_dims = len(self._dim_size)
 
+        
         #两个数组的长度在逻辑上是相等的，都为2
-        if len(self._dim_size) != len(self._dim_width):
-            print("topo%s:  Incompatible number of dimensions set for shape (%s) and width (%s)."%(self.getName(),shape,width))
-            exit(1)
+        #if len(self._dim_size) != len(self._dim_width):
+            #print("topo%s:  Incompatible number of dimensions set for shape (%s) and width (%s)."%(self.getName(),shape,width))
+            #exit(1)
+    
     #下面两个方法没有具体实现，需要子类继承并实现
     def _getTopologyName():
         pass
@@ -78,49 +80,79 @@ class _topoMeshBase(Topology):
     def _includeWrapLinks():
         pass
 
-    #计算并返回拓扑结构中的节点路由器总数
+    #计算并返回拓扑结构中的主机总数
     def getNumNodes(self):
         if not self._dim_size or not self.local_ports:
             print("topo%s: calling getNumNodes before shape, width and local_ports was set."%self.getName())
             exit(1)
-        #num_routers变量用于累乘，来计算总的路由器数量
+        #num_routers变量用于累乘，来计算hm拓扑中总的路由器数量
         num_routers = 1;
         for x in self._dim_size:
             num_routers = num_routers * x
-        #返回路由器数量 x 每个路由器本地端口数量 = 总的节点（终端）数量 
+        #返回总的主机数量 
         return num_routers * int(self.local_ports)
+    
+    #【新增】计算并返回拓扑结构中的路由器总数
+    def getNumRouters(self):
+        if not self._dim_size:
+            print("topo%s: calling getNumRouters before shape, width was set."%self.getName())
+            exit(1)
+        #num_routers变量用于累乘，来计算hm拓扑中总的路由器数量
+        num_routers = 1;
+        for x in self._dim_size:
+            num_routers = num_routers * x
+        #返回总的路由器数量 
+        return num_routers
+    
+    #【新增】计算并返回路由器的hm_id
+    def getHmid(self,rtr_id):
+        return rtr_id / (self._dim_size[0]*self._dim_size[1])
 
+    #【新增】获取hm拓扑一列和一行所需要的端口数
+    def _switch_x_and_y_ports(self):
+        switchxy=list((0 for _ in range(2)))
+        switchxy[0]=2*self._dim_size[0]*self._dim_size[2]
+        switchxy[1]=2*self._dim_size[1]*self._dim_size[3]
+        return switchxy
 
     def setShape(self,shape,width,local_ports):
         this.shape = shape
         this.width = width
         this.local_ports = local_ports
+    
     #将arr[2,4]通过下面函数转化为"2x4"
     def _formatShape(self, arr):
         return 'x'.join([str(x) for x in arr])
 
-    #将路由器标识符rtr_id转换为在拓扑上的位置foo
+    #将路由器标识符rtr_id转换为在拓扑上的位置location【改动】
     def _idToLoc(self,rtr_id):
-        foo = list()
-        for i in range(self._num_dims-1, 0, -1):
-            div = 1
-            for j in range(0, i):
-                div = div * self._dim_size[j]
-            value = (rtr_id // div)
-            foo.append(value)
-            rtr_id = rtr_id - (value * div)
-        foo.append(rtr_id)
-        foo.reverse()
-        return foo
+        hm_id=self.getHmid(rtr_id)
+        location = list((0 for _ in range(self._num_dims)))
+
+        # 根据 hm_id 计算 location 数组的后两位
+        location[self._num_dims - 2] = hm_id % self._dim_size[self._num_dims - 2]
+        location[self._num_dims - 1] = (hm_id // self._dim_size[self._num_dims - 2]) % _dim_size[dimensions - 1]
+
+        # 根据 run_id 计算 location 数组的前两位
+        location[0] = rtr_id % self._dim_size[0]
+        location[1] = (rtr_id // self._dim_size[0]) % self._dim_size[1]
+
+        # 确保每个位置的值都在 0 到 dim_size 对应维度的范围内
+        for i in range(self._num_dims):
+            if location[i] >= self._dim_size[i]:
+                location[i] = 0  # 如果计算出的值超出范围，则重置为 0
+
+        return location
+        #虽然在hm板子上的id已经定义完了，但是在二级fattree上的路由器id还没有确定在拓扑中的位置
 
     def getRouterNameForId(self,rtr_id):
         return self.getRouterNameForLocation(self._idToLoc(rtr_id))
     
-    #根据路由器的位置返回路由器的名称，例如：rtr_3x3
+    #根据路由器的位置返回路由器的名称，例如：rtr_1x1x1x1
     def getRouterNameForLocation(self,location):
         return "rtr_%s"%(self._formatShape(location))
     
-    #在模拟系统sst中查找具有"rtr_3x3"名称的组件
+    #在模拟系统sst中查找具有"rtr_1x1x1x1"名称的组件
     def findRouterByLocation(self,location):
         return sst.findComponentByName(self.getRouterNameForLocation(location))
 
@@ -133,21 +165,28 @@ class _topoMeshBase(Topology):
         local_ports = int(self.local_ports)
         num_dims = len(self._dim_size)
 
-        
-
         # Calculate number of routers and endpoints
-        #计算路由器的数量
+        #计算路由器的数量（hm板子上的路由器数量）
         num_routers = 1
         for x in self._dim_size:
             num_routers = num_routers * x
 
-        #计算所有路由器总共的本地端口（终端）数
+        #计算hm拓扑中行/列交换机(路由器)的数量
+        num_switchx = self._dim_size[2]
+        num_switchy = self._dim_size[3]
+        num_switches = num_switchx + num_switchy
+
+        #计算hm板子上所有路由器总共的本地端口(终端)数[不包括行列交换机]
         num_peers = num_routers * local_ports
 
-        #计算每个路由器所需的总的端口数
+        #计算hm板子上的单个路由器所需的总的端口数
         radix = local_ports
         for x in range(num_dims):
             radix = radix + (self._dim_width[x] * 2)
+
+        #计算hm拓扑中行/列交换机(路由器)所需要的端口数
+        radix_switchxy = list()
+        radix_switchxy = self._switch_x_and_y_ports
             
         #在网络拓扑中创建和管理连接，通过getLink函数实现
         #创建一个空字典
@@ -160,70 +199,72 @@ class _topoMeshBase(Topology):
                 links[name] = sst.Link(name)
             return links[name]
 
-        #此循环从0遍历到num_routers(不包括num_routers)
-        for i in range(num_routers):
-            # set up 'mydims'
-            #例如：mydims=[1,3]
-            mydims = self._idToLoc(i)
-            #例如mylocst=1x3
-            mylocstr = self._formatShape(mydims)
+        #此循环从0遍历到num_routers+num_switches,用于建立整个拓扑的连接
+        for i in range(num_routers+num_switches):
+            #配置板子上的路由器对象和链路
+            if i < num_routers:
+               # set up 'mydims'
+               #例如：mydims=[1,1,1,1]
+               mydims = self._idToLoc(i)
+               #例如mylocst='1x1x1x1'
+               mylocstr = self._formatShape(mydims)
 
-            #实例化一个路由器对象
-            rtr = self._instanceRouter(radix,i)
+               #实例化一个路由器对象
+               rtr = self._instanceRouter(radix,i)
 
-            #设置一个路由器组件的拓扑结构
-            #getTopologySlotName是为了获取拓扑结构在路由器组件中的位置或者标识符
-            #topology接收一个与拓扑相关的SubComponent组件
-            topology = rtr.setSubComponent(self.router.getTopologySlotName(),self._getTopologyName())
-            #应用统计设置topology对象，包括设置如何收集和报告网络中的性能数据，包括传输延迟、吞吐量等
-            self._applyStatisticsSettings(topology)
-            #用于给topology对象添加一组参数，与"main"相关的
-            topology.addParams(self._getGroupParams("main"))
+               #设置一个路由器组件的拓扑结构
+               #getTopologySlotName是为了获取拓扑结构在路由器组件中的位置或者标识符
+               #topology接收一个与拓扑相关的SubComponent组件
+               topology = rtr.setSubComponent(self.router.getTopologySlotName(),self._getTopologyName())
+               #应用统计设置topology对象，包括设置如何收集和报告网络中的性能数据，包括传输延迟、吞吐量等
+               self._applyStatisticsSettings(topology)
+               #用于给topology对象添加一组参数，与"main"相关的
+               topology.addParams(self._getGroupParams("main"))
 
-            #port变量用于跟踪当前的端口号
-            port = 0
-            #下面的for循环用于表示与当前路由器相连的其他路由器在拓扑中的位置
-            for dim in range(num_dims):
-                #复制当前路由器的位置信息
-                theirdims = mydims[:]
+               #port变量用于跟踪当前的端口号
+               port = 0
+               #下面的for循环用于表示与当前路由器相连的其他路由器在拓扑中的位置
+               for dim in range(num_dims):
+                   #复制当前路由器的位置信息
+                   theirdims = mydims[:]
 
-                # Positive direction
-                #检查当前路由器是否还没到最右端或者在最右端但是有环连接（torus）
-                if mydims[dim]+1 < self._dim_size[dim] or self._includeWrapLinks():
-                    #如果条件为真，计算相邻路由器的位置
-                    theirdims[dim] = (mydims[dim] +1 ) % self._dim_size[dim]
-                    #将相邻路由器的位置转换为"3x3"字符串的形式
-                    theirlocstr = self._formatShape(theirdims)
-                    #遍历当前维度的所有端口
-                    for num in range(self._dim_width[dim]):
-                        #将当前路由器的名称和相邻路由器的名称作为参数建立当前维度的link对象，连接的端口号由port指定，并且设置延迟为self.link_latency
-                        rtr.addLink(getLink(mylocstr, theirlocstr, num), "port%d"%port, self.link_latency)
-                        #每次添加连接后，port变量递增，准备为下一个链接设置端口
-                        port = port+1
-                #如果在该维度的最右边，则port加上连接数跳到负向进行负向端口的初始化与配置
-                else:
-                    port += self._dim_width[dim]
+                   # Positive direction
+                   #检查当前路由器是否还没到最右端或者在最右端但是有环连接（torus）
+                   if mydims[dim]+1 < self._dim_size[dim] or self._includeWrapLinks():
+                       #如果条件为真，计算相邻路由器的位置
+                       theirdims[dim] = (mydims[dim] +1 ) % self._dim_size[dim]
+                       #将相邻路由器的位置转换为"3x3"字符串的形式
+                       theirlocstr = self._formatShape(theirdims)
+                       #遍历当前维度的所有端口
+                       for num in range(self._dim_width[dim]):
+                           #将当前路由器的名称和相邻路由器的名称作为参数建立当前维度的link对象，连接的端口号由port指定，并且设置延迟为self.link_latency
+                           rtr.addLink(getLink(mylocstr, theirlocstr, num), "port%d"%port, self.link_latency)
+                           #每次添加连接后，port变量递增，准备为下一个链接设置端口
+                           port = port+1
+                   #如果在该维度的最右边，则port加上连接数跳到负向进行负向端口的初始化与配置
+                   else:
+                       port += self._dim_width[dim]
 
-                # Negative direction
-                #配负向，负向配完跳维度
-                if mydims[dim] > 0 or self._includeWrapLinks():
-                    theirdims[dim] = ((mydims[dim] -1) + self._dim_size[dim]) % self._dim_size[dim]
-                    theirlocstr = self._formatShape(theirdims)
-                    for num in range(self._dim_width[dim]):
-                        rtr.addLink(getLink(theirlocstr, mylocstr, num), "port%d"%port, self.link_latency)
-                        port = port+1
-                else:
-                    port += self._dim_width[dim]
+                   # Negative direction
+                   #配负向，负向配完跳维度
+                   if mydims[dim] > 0 or self._includeWrapLinks():
+                       theirdims[dim] = ((mydims[dim] -1) + self._dim_size[dim]) % self._dim_size[dim]
+                       theirlocstr = self._formatShape(theirdims)
+                       for num in range(self._dim_width[dim]):
+                           rtr.addLink(getLink(theirlocstr, mylocstr, num), "port%d"%port, self.link_latency)
+                           port = port+1
+                   else:
+                       port += self._dim_width[dim]
 
-            for n in range(local_ports):
-                nodeID = local_ports * i + n
-                (ep, port_name) = endpoint.build(nodeID, {})
-                if ep:
-                    nicLink = sst.Link("nic.%d:%d"%(i, n))
-                    if self.bundleEndpoints:
-                       nicLink.setNoCut()
-                    nicLink.connect( (ep, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
-                port = port+1
+               for n in range(local_ports):
+                   nodeID = local_ports * i + n
+                   (ep, port_name) = endpoint.build(nodeID, {})
+                   if ep:
+                       nicLink = sst.Link("nic.%d:%d"%(i, n))
+                       if self.bundleEndpoints:
+                          nicLink.setNoCut()
+                       nicLink.connect( (ep, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
+                   port = port+1
 
 
 
