@@ -120,7 +120,7 @@ class _topoMeshBase(Topology):
         this.width = width
         this.local_ports = local_ports
     
-    #将arr[2,4]通过下面函数转化为"2x4"
+    #将arr[1,1,1,1]通过下面函数转化为'1x1x1x1'
     def _formatShape(self, arr):
         return 'x'.join([str(x) for x in arr])
 
@@ -128,23 +128,46 @@ class _topoMeshBase(Topology):
     def _idToLoc(self,rtr_id):
         hm_id=self.getHmid(rtr_id)
         location = list((0 for _ in range(self._num_dims)))
+        r_id=rtr_id
 
-        # 根据 hm_id 计算 location 数组的后两位
-        location[self._num_dims - 2] = hm_id % self._dim_size[self._num_dims - 2]
-        location[self._num_dims - 1] = (hm_id // self._dim_size[self._num_dims - 2]) % _dim_size[dimensions - 1]
-
-        # 根据 run_id 计算 location 数组的前两位
-        location[0] = rtr_id % self._dim_size[0]
-        location[1] = (rtr_id // self._dim_size[0]) % self._dim_size[1]
-
-        # 确保每个位置的值都在 0 到 dim_size 对应维度的范围内
-        for i in range(self._num_dims):
-            if location[i] >= self._dim_size[i]:
-                location[i] = 0  # 如果计算出的值超出范围，则重置为 0
-
-        return location
-        #虽然在hm板子上的id已经定义完了，但是在二级fattree上的路由器id还没有确定在拓扑中的位置
-
+        # 计算 switch_fid
+        switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3]
+    
+        # 根据 rtr_id 的值设置 location 数组
+        if 0 < rtr_id < switch_fid:
+           # 设置前两位
+           location[0] = rtr_id % _dim_size[0]
+           location[1] = (rtr_id // _dim_size[0]) % _dim_size[1]
+        
+           # 设置后两位
+           hm_id = rtr_id // (_dim_size[0] * _dim_size[1])
+           location[2] = hm_id % _dim_size[2]
+           location[3] = (hm_id // _dim_size[2]) % _dim_size[3]
+       elif switch_fid <= rtr_id < switch_fid + _dim_size[2]:
+           # 设置前两位为 rtr_id
+           location[0] = r_id
+           location[1] = r_id
+        
+           # 设置后两位
+           num = rtr_id - switch_fid
+           location[2] = r_id
+           location[3] = num
+       elif switch_fid + _dim_size[2] <= rtr_id < switch_fid + _dim_size[2] + _dim_size[3]:
+           # 设置前两位为 rtr_id
+           location[0] = r_id
+           location[1] = r_id 
+        
+           # 设置后两位
+           num = rtr_id - (switch_fid + _dim_size[2])
+           location[2] = num
+           location[3] = r_id
+       else:
+           # 如果 rtr_id 不在预期的范围内，设置每个位置为 rtr_id
+           for i in range(dimensions):
+               location[i] = r_id
+    
+       return location
+       
     def getRouterNameForId(self,rtr_id):
         return self.getRouterNameForLocation(self._idToLoc(rtr_id))
     
@@ -193,7 +216,7 @@ class _topoMeshBase(Topology):
         links = dict()
         #定义了一个getLink函数
         def getLink(leftName, rightName, num):
-            #定义连接的名称：例如link_A_B_1、link_A_B_2
+            #定义连接的名称：例如link_、link_A_B_2
             name = "link_%s_%s_%d"%(leftName, rightName, num)
             if name not in links:
                 links[name] = sst.Link(name)
@@ -224,16 +247,17 @@ class _topoMeshBase(Topology):
                #port变量用于跟踪当前的端口号
                port = 0
                #下面的for循环用于表示与当前路由器相连的其他路由器在拓扑中的位置
-               for dim in range(num_dims):
+               #现在规定只有两个维度
+               for dim in range (2):
                    #复制当前路由器的位置信息
                    theirdims = mydims[:]
 
                    # Positive direction
-                   #检查当前路由器是否还没到最右端或者在最右端但是有环连接（torus）
-                   if mydims[dim]+1 < self._dim_size[dim] or self._includeWrapLinks():
+                   #检查当前路由器是否还没到最右端或者在最右端
+                   if mydims[dim]+1 < self._dim_size[dim]:
                        #如果条件为真，计算相邻路由器的位置
-                       theirdims[dim] = (mydims[dim] +1 ) % self._dim_size[dim]
-                       #将相邻路由器的位置转换为"3x3"字符串的形式
+                       theirdims[dim] = (mydims[dim] +1 )
+                       #将相邻路由器的位置转换为"1x1x1x1"字符串的形式
                        theirlocstr = self._formatShape(theirdims)
                        #遍历当前维度的所有端口
                        for num in range(self._dim_width[dim]):
@@ -265,6 +289,8 @@ class _topoMeshBase(Topology):
                           nicLink.setNoCut()
                        nicLink.connect( (ep, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
                    port = port+1
+            #配置交换机和其上的链路
+            else:
 
 
 
