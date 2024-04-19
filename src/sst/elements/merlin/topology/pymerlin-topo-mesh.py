@@ -24,7 +24,7 @@ class _topoMeshBase(Topology):
     def __init__(self):
         #父类Topology的构造参数，初始化继承Topology的属性和方法
         Topology.__init__(self)
-        #_declareClassVariables是一个类方法，用于声明类的实例变量【新增_hm_id】
+        #_declareClassVariables是一个类方法，用于声明类的实例变量
         self._declareClassVariables(["link_latency","host_link_latency","bundleEndpoints","_num_dims","_dim_size","_dim_width"])
         #_declareParams用于声明类的参数，这些参数可以在类的实例化时设置
         self._declareParams("main",["shape", "width", "local_ports"])
@@ -105,15 +105,15 @@ class _topoMeshBase(Topology):
         return num_routers
     
     #【新增】计算并返回路由器的hm_id
-    def getHmid(self,rtr_id):
-        return rtr_id / (self._dim_size[0]*self._dim_size[1])
+    def getHmid(self, rtr_id):
+        return rtr_id // (self._dim_size[0] * self._dim_size[1])
 
     #【新增】获取hm拓扑一列和一行所需要的端口数
     def _switch_x_and_y_ports(self):
-        switchxy=list((0 for _ in range(2)))
-        switchxy[0]=2*self._dim_size[0]*self._dim_size[2]
-        switchxy[1]=2*self._dim_size[1]*self._dim_size[3]
-        return switchxy
+        switchxy = list((0 for _ in range(2)))
+        switchxy[0] = 2 * self._dim_size[0] * self._dim_size[2]
+        switchxy[1] = 2 * self._dim_size[1] * self._dim_size[3]
+    return switchxy
 
     def setShape(self,shape,width,local_ports):
         this.shape = shape
@@ -125,45 +125,45 @@ class _topoMeshBase(Topology):
         return 'x'.join([str(x) for x in arr])
 
     #将路由器标识符rtr_id转换为在拓扑上的位置location【改动】
-    def _idToLoc(self,rtr_id):
-        hm_id=self.getHmid(rtr_id)
+    def _idToLoc(self, rtr_id):
+        hm_id = self.getHmid(rtr_id)
         location = list((0 for _ in range(self._num_dims)))
-        r_id=rtr_id
-
+        r_id = rtr_id
+    
         # 计算 switch_fid
-        switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3]
+        switch_fid = self._dim_size[0] * self._dim_size[1] * self._dim_size[2] * self._dim_size[3]
     
         # 根据 rtr_id 的值设置 location 数组
         if 0 < rtr_id < switch_fid:
             # 设置前两位
-            location[0] = rtr_id % _dim_size[0]
-            location[1] = (rtr_id // _dim_size[0]) % _dim_size[1]
-        
+            location[0] = rtr_id % self._dim_size[0]
+            location[1] = (rtr_id // self._dim_size[0]) % self._dim_size[1]
+    
             # 设置后两位
-            hm_id = rtr_id // (_dim_size[0] * _dim_size[1])
-            location[2] = hm_id % _dim_size[2]
-            location[3] = (hm_id // _dim_size[2]) % _dim_size[3]
-        elif switch_fid <= rtr_id < switch_fid + _dim_size[2]:
+            hm_id = rtr_id // (self._dim_size[0] * self._dim_size[1])
+            location[2] = hm_id % self._dim_size[2]
+            location[3] = (hm_id // self._dim_size[2]) % self._dim_size[3]
+        elif switch_fid <= rtr_id < switch_fid + self._dim_size[2]:
             # 设置前两位为 rtr_id
             location[0] = r_id
             location[1] = r_id
-        
+    
             # 设置后两位
             num = rtr_id - switch_fid
             location[2] = r_id
             location[3] = num
-        elif switch_fid + _dim_size[2] <= rtr_id < switch_fid + _dim_size[2] + _dim_size[3]:
+        elif switch_fid + self._dim_size[2] <= rtr_id < switch_fid + self._dim_size[2] + self._dim_size[3]:
             # 设置前两位为 rtr_id
             location[0] = r_id
-            location[1] = r_id 
-        
+            location[1] = r_id
+    
             # 设置后两位
-            num = rtr_id - (switch_fid + _dim_size[2])
+            num = rtr_id - (switch_fid + self._dim_size[2])
             location[2] = num
             location[3] = r_id
         else:
             # 如果 rtr_id 不在预期的范围内，设置每个位置为 rtr_id
-            for i in range(dimensions):
+            for i in range(self._num_dims):  # 这里应该是 self._num_dims 而不是 dimensions
                 location[i] = r_id
     
         return location
@@ -212,35 +212,38 @@ class _topoMeshBase(Topology):
         radix_switchxy = self._switch_x_and_y_ports
             
         #在网络拓扑中创建和管理连接，通过getLink函数实现
-        #创建一个空字典
+        #创建一个空字典,可以以键值对的方式存储
         links = dict()
         #定义了一个getLink函数
         def getLink(leftName, rightName, num):
-            #定义连接的名称：例如link_、link_A_B_2
+            #定义连接的名称：例如link_0x1x0x0_1x1x0x0_0
             name = "link_%s_%s_%d"%(leftName, rightName, num)
             if name not in links:
                 links[name] = sst.Link(name)
             return links[name]
-
-        #此循环从0遍历到num_routers+num_switches,用于建立整个拓扑的连接
-        for i in range(num_routers+num_switches):
+        
+        
+        
+        #此循环从0遍历到num_routers,用于建立整个hm板子上拓扑的连接
+        for i in range(num_routers):
             #配置板子上的路由器对象和链路
-            if i < num_routers:
                # set up 'mydims'
                #例如：mydims=[1,1,1,1]
                mydims = self._idToLoc(i)
                #例如mylocst='1x1x1x1'
                mylocstr = self._formatShape(mydims)
 
-               #实例化一个路由器对象
+               #实例化一个路由器对象，他的端口数为radix,rtr是一个Component
                rtr = self._instanceRouter(radix,i)
 
                #设置一个路由器组件的拓扑结构
                #getTopologySlotName是为了获取拓扑结构在路由器组件中的位置或者标识符
                #topology接收一个与拓扑相关的SubComponent组件
                topology = rtr.setSubComponent(self.router.getTopologySlotName(),self._getTopologyName())
+               
                #应用统计设置topology对象，包括设置如何收集和报告网络中的性能数据，包括传输延迟、吞吐量等
                self._applyStatisticsSettings(topology)
+               
                #用于给topology对象添加一组参数，与"main"相关的
                topology.addParams(self._getGroupParams("main"))
 
@@ -249,15 +252,16 @@ class _topoMeshBase(Topology):
                #下面的for循环用于表示与当前路由器相连的其他路由器在拓扑中的位置
                #现在规定只有两个维度
                for dim in range (2):
-                   #复制当前路由器的位置信息
+                   #复制当前路由器的位置信息，例如0x0x0x0
                    theirdims = mydims[:]
 
                    # Positive direction
-                   #检查当前路由器是否还没到最右端或者在最右端
+                   #如果路由器的前两个维度的数值加1要小于前两个维度的大小
+                   #说明路由器的相邻路由器还是在hm板子内
                    if mydims[dim]+1 < self._dim_size[dim]:
-                       #如果条件为真，计算相邻路由器的位置
+                       #如果条件为真，计算相邻路由器的位置，例如1x0x0x0
                        theirdims[dim] = (mydims[dim] +1 )
-                       #将相邻路由器的位置转换为"1x1x1x1"字符串的形式
+                       #将相邻路由器的位置转换为"1x0x0x0"字符串的形式
                        theirlocstr = self._formatShape(theirdims)
                        #遍历当前维度的所有端口
                        for num in range(self._dim_width[dim]):
@@ -265,13 +269,13 @@ class _topoMeshBase(Topology):
                            rtr.addLink(getLink(mylocstr, theirlocstr, num), "port%d"%port, self.link_latency)
                            #每次添加连接后，port变量递增，准备为下一个链接设置端口
                            port = port+1
-                   #如果在该维度的最右边，则port加上连接数跳到负向进行负向端口的初始化与配置
+                   #如果在hm板子的最右边，先跳到负向进行负向端口的初始化与配置
                    else:
                        port += self._dim_width[dim]
 
                    # Negative direction
                    #配负向，负向配完跳维度
-                   if mydims[dim] > 0 or self._includeWrapLinks():
+                   if mydims[dim] > 0:
                        theirdims[dim] = ((mydims[dim] -1) + self._dim_size[dim]) % self._dim_size[dim]
                        theirlocstr = self._formatShape(theirdims)
                        for num in range(self._dim_width[dim]):
@@ -289,9 +293,32 @@ class _topoMeshBase(Topology):
                           nicLink.setNoCut()
                        nicLink.connect( (ep, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
                    port = port+1
-            #配置交换机和其上的链路
-            else:
+        #建立一个字典，用于存储交换机实例
+        switches = dict()  
+        #创建一个变量，记录交换机的起始id
+        switch_fid = self._dim_size[0] * self._dim_size[1] * self._dim_size[2] * self._dim_size[3]
+        
+        #配置交换机上的链路【新增】
+        for i in range(num_switches)
+            count = switch_fid+i
+            # set up 'mydims'
+            #例如：mydims=[16,16,16,0]
+            mydims = self._idToLoc(count)
+            #例如mylocst='16x16x16x0'
+            mylocstr = self._formatShape(mydims)
 
+            if i < num_switchx:
+                #创建x维度的交换机
+                rtr=self._instanceRouter(radix_switchxy[0],count)
+                switches[mylocstr]=rtr
+            else:    
+                #创建y维度的交换机
+                rtr=self._instanceRouter(radix_switchxy[1],count+self.dim_size[2]+j)
+                switches[mylocstr]=rtr
+            topology = rtr.setSubComponent(self.router.getTopologySlotName(),self._getTopologyName())
+            self._applyStatisticsSettings(topology)
+            topology.addParams(self._getGroupParams("main"))
+            
 
 
 class topoMesh(_topoMeshBase):
