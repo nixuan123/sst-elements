@@ -34,14 +34,14 @@ public:
     //使用SST的ELI（Element Library Interface）系统进行注册
     //这意味着它可以被SST框架识别和使用
     SST_ELI_REGISTER_SUBCOMPONENT(
-        topo_fattree,
-        "merlin",
-        "fattree",
-        SST_ELI_ELEMENT_VERSION(1,0,0),
-        "Fattree topology object",
-        SST::Merlin::Topology
+        topo_fattree,//组件类名
+        "merlin",//组件命名空间
+        "fattree",//组件名称
+        SST_ELI_ELEMENT_VERSION(1,0,0),//组件的版本
+        "Fattree topology object",//组件简短描述
+        SST::Merlin::Topology//父类名称
     )
-    //使用SST的ELI（Element Library Interface）系统进行文档化
+    //使用SST的ELI（Element Library Interface）系统进行文档化，为组件的每一个参数进行描述
     SST_ELI_DOCUMENT_PARAMS(
         // Parameters needed for use with old merlin python module
         {"fattree.shape",               "Shape of the fattree"},
