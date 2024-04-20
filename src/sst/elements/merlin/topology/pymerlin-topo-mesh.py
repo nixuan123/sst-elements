@@ -217,20 +217,20 @@ class _topoMeshBase(Topology):
         
         #创建一个变量，记录交换机的起始id
         switch_fid = self._dim_size[0] * self._dim_size[1] * self._dim_size[2] * self._dim_size[3]
-        #创建一个字典，记录交换机们的id,例如switch_ids=[16,17,18,19]
-        switch_ids= dict()
+        #初始化一个空列表，记录交换机们的id,例如switch_ids=[16,17,18,19]
+        switch_ids=[]
         for i in range(num_switches):
             switch_ids[i]=switch_fid+i
         
         #创建一个字典，用于记录相应交换机遍历到的端口号，将他们初始化为0
-        #例如switch_port=[[16,0],[17,0],[18,0],[19,0]]
+        #例如switch_port={16:{-1},17:{-1},18:{-1},19:{-1}}
         switch_port = dict()
         for i in range(num_switches):
             switch_port[switch_ids[i]]=-1
 
-        #创建一个字典，用于存储交换机映射后的位置
+        #创建一个嵌套列表，用于存储交换机映射后的位置
         #例如switch_loc=[[16,16,16,0],[17,17,17,1],[18,18,0,18],[19,19,1,19]]
-        switch_loc= dict()
+        switch_loc=[]
         for i in range(num_switches):
             switch_loc[i]=self._idToLoc(switch_ids[i])
             
@@ -246,55 +246,61 @@ class _topoMeshBase(Topology):
             return links[name]
 
         #只有处在边缘位置的路由器才需要调用这个函数 
-        def edgeRouterGetSwitchIds(rtr_id):
-            #定义一个列表用于保存当前路由器的行列交换机信息
-            my_switches=list()
+        def _edgeRouterGetSwitchIds(rtr_id):
+            #初始化一个空列表用于保存当前路由器的行列交换机信息,[0,0]
+            my_switches=[0]*2
             #先获取路由器的位置，例如dim_size=[2,2,2,2]的情况下,loc=[1,0,1,0]
             loc=self._idToLoc(rtr_id)
             #判断路由器是否在对角的位置,如果是对角位置，需要返回行、列两个交换机的id
             if ((loc[0]==0&&loc[1]=0)||(loc[0]==self._dim_size[1]-1&&loc[1]==0)||(loc[0]==0&&loc[1]==self._dim_size[0]-1)
                ||(loc[0]==self._dim_size[1]-1&&loc[1]==self._dim_size[0]-1)):
                    #找寻行交换机
-                   for value in switch_loc.value():
-                       if value[3]==loc[3]:
+                   for location in switch_loc:
+                       if location[3] == loc[3]:
                            #对应的全局变量端口+1
-                           switch_port[value[0]]+=1
+                           switch_port[location[0]]+=1
+                           #将行交换机的id添加到列表的第一个位置
+                           my_switches[0]=location[0]
                            break
                    #找寻列交换机
-                   for value in switch_loc.value():
-                       if value[2]==loc[2]:
+                   for location in switch_loc:
+                       if location[2]==loc[2]:
                            #对应的全局变量端口+1
-        
+                           switch_port[location[0]]+=1
+                           #将列交换机的id添加到列表的第二个位置
+                           my_switches[1]=location[0]
+                           break
+                   #跳出if-else循环
+                   break
+            #如果是行的边缘
+            elif loc[1]==0||loc[1]==self._dim_size[0]-1:
+                   #找寻行交换机
+                   for location in switch_loc:
+                       if location[3] == loc[3]:
+                           #对应的全局变量端口+1
+                           switch_port[location[0]]+=1
+                           #将行交换机的id添加到列表的第一个位置
+                           my_switches[0]=location[0]
+                           break
+                    #跳出if-else循环
+                    break
+            #如果是列的边缘
+            elif loc[0]==0||loc[0]==self._dim_size[1]-1:
+                   #找寻列交换机
+                   for location in switch_loc:
+                       if location[2] == loc[2]:
+                           #对应的全局变量端口+1
+                           switch_port[location[0]]+=1
+                           #将交换机的id添加到列表的第二个位置
+                           my_switches[1]=location[0]
+                           break
+                    #跳出if-else循环
+                    break
+            else :
+                print("Error message:The current router is not an edge router!")
+            return my_switches
+            
                            
-               
-        
-        
-        #创建交换机【新增】
-        for i in range(num_switches)
-            count = switch_fid+i
-            # set up 'mydims'
-            #例如：mydims=[16,16,16,0]
-            mydims = self._idToLoc(count)
-            #例如mylocst='16x16x16x0'
-            mylocstr = self._formatShape(mydims)
-            num_hx_routers=self._dim_size[0]*self._dim_size[1]*self._dim_size[2]
-            num_hy_routers=self._dim_size[0]*self._dim_size[1]*self._dim_size[3]
-            if i < num_switchx:
-                #创建x维度的交换机
-                rtr=self._instanceRouter(radix_switchxy[0],count)
-                switches[mylocstr]=rtr
-                topology = rtr.setSubComponent(self.router.getTopologySlotName(),self._getTopologyName())
-                self._applyStatisticsSettings(topology)
-                topology.addParams(self._getGroupParams("main"))
-                #配置连接
-                
-                port=0
-                for i in (radix_switchxy[0]):
-                    
-            else:    
-                #创建y维度的交换机
-                rtr=self._instanceRouter(radix_switchxy[1],count+self.dim_size[2]+j)
-                switches[mylocstr]=rtr
         
         #添加hm板上的链路
         for i in range(num_routers):
@@ -341,12 +347,16 @@ class _topoMeshBase(Topology):
                            rtr.addLink(getLink(mylocstr, theirlocstr, num), "port%d"%port, self.link_latency)
                            #每次添加连接后，port变量递增，准备为下一个链接设置端口
                            port = port+1
-                   #如果在hm板子的最右边，需要添加两条链路分别连接行和列交换机，然后跳到负向进行负向端口的初始化与配置
+                   #如果在hm板子的最右边或者最下边，需要添加交换机链路，然后跳到负向进行负向端口的初始化与配置
                    else:
-                       #计算需要连接的交换机位置
-                       #写一个函数
-                       rtr.addLink(getLink())
-                       port += self._dim_width[dim]
+                       #返回行列交换机id数组,例如my_switches=[16,19]或者my_switches=[16,0]
+                       my_switches = self._edgeRouterGetSwitchIds(i)
+                       for i in my_switches:
+                           if i !=0:
+                               theirdims=self._idToLoc(i)
+                               theirlocstr=self._formatShape(theirdims)
+                               rtr.addLink(getLink(mylocstr,theirlocstr,0),"port%d"switch_port[i], self.link_latency)
+                        port += self._dim_width[dim]
 
                    # Negative direction
                    #配负向，负向配完跳维度
@@ -356,8 +366,17 @@ class _topoMeshBase(Topology):
                        for num in range(self._dim_width[dim]):
                            rtr.addLink(getLink(theirlocstr, mylocstr, num), "port%d"%port, self.link_latency)
                            port = port+1
+                   #如果在hm板子的最左边或者最上边，需要添加交换机信息，然后跳到负向进行负向端口的初始化与配置
                    else:
-                       port += self._dim_width[dim]
+                       #返回行列交换机id数组,例如my_switches=[16,19]或者my_switches=[16,0]
+                       my_switches = self._edgeRouterGetSwitchIds(i)
+                       for i in my_switches:
+                           if i !=0:
+                               theirdims=self._idToLoc(i)
+                               theirlocstr=self._formatShape(theirdims)
+                               rtr.addLink(getLink(mylocstr,theirlocstr,0),"port%d"switch_port[i], self.link_latency)
+                        port += self._dim_width[dim]
+                       
 
                for n in range(local_ports):
                    nodeID = local_ports * i + n
