@@ -220,7 +220,7 @@ class _topoMeshBase(Topology):
         #初始化一个空列表，记录交换机们的id,例如switch_ids=[16,17,18,19]
         switch_ids=[]
         for i in range(num_switches):
-            switch_ids[i]=switch_fid+i
+            switch_ids.append(switch_fid + i)
         
         #创建一个字典，用于记录相应交换机遍历到的端口号，将他们初始化为0
         #例如switch_port={16:{-1},17:{-1},18:{-1},19:{-1}}
@@ -232,7 +232,7 @@ class _topoMeshBase(Topology):
         #例如switch_loc=[[16,16,16,0],[17,17,17,1],[18,18,0,18],[19,19,1,19]]
         switch_loc=[]
         for i in range(num_switches):
-            switch_loc[i]=self._idToLoc(switch_ids[i])
+            switch_loc.append(self._idToLoc(switch_ids[i]))
             
         #在网络拓扑中创建和管理连接，通过getLink函数实现
         #创建一个空字典,可以以键值对的方式存储
@@ -252,8 +252,10 @@ class _topoMeshBase(Topology):
             #先获取路由器的位置，例如dim_size=[2,2,2,2]的情况下,loc=[1,0,1,0]
             loc=self._idToLoc(rtr_id)
             #判断路由器是否在对角的位置,如果是对角位置，需要返回行、列两个交换机的id
-            if ((loc[0]==0&&loc[1]=0)||(loc[0]==self._dim_size[1]-1&&loc[1]==0)||(loc[0]==0&&loc[1]==self._dim_size[0]-1)
-               ||(loc[0]==self._dim_size[1]-1&&loc[1]==self._dim_size[0]-1)):
+            if ((loc[0] == 0 and loc[1] == 0) or
+                (loc[0] == self._dim_size[1] - 1 and loc[1] == 0) or
+                (loc[0] == 0 and loc[1] == self._dim_size[0] - 1) or
+                (loc[0] == self._dim_size[1] - 1 and loc[1] == self._dim_size[0] - 1)):
                    #找寻行交换机
                    for location in switch_loc:
                        if location[3] == loc[3]:
@@ -273,10 +275,10 @@ class _topoMeshBase(Topology):
                    #跳出if-else循环
                    break
             #如果是行的边缘
-            elif loc[1]==0||loc[1]==self._dim_size[0]-1:
-                   #找寻行交换机
+            elif loc[1]==0 or loc[1]==self._dim_size[0]-1:
+                   #找寻列交换机
                    for location in switch_loc:
-                       if location[3] == loc[3]:
+                       if location[2] == loc[2]:
                            #对应的全局变量端口+1
                            switch_port[location[0]]+=1
                            #将行交换机的id添加到列表的第一个位置
@@ -285,10 +287,10 @@ class _topoMeshBase(Topology):
                     #跳出if-else循环
                     break
             #如果是列的边缘
-            elif loc[0]==0||loc[0]==self._dim_size[1]-1:
-                   #找寻列交换机
+            elif loc[0]==0 or loc[0]==self._dim_size[1]-1:
+                   #找寻行交换机
                    for location in switch_loc:
-                       if location[2] == loc[2]:
+                       if location[3] == loc[3]:
                            #对应的全局变量端口+1
                            switch_port[location[0]]+=1
                            #将交换机的id添加到列表的第二个位置
