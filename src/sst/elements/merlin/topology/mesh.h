@@ -29,22 +29,20 @@
 
 namespace SST {
 namespace Merlin {
-//专门用于处理mesh（现在被我改为hm）内部路由的函数
+//专门用于处理hm内部路由的函数
 class topo_mesh_event : public internal_router_event {
 public:
     
     int dimensions;//现在这个dimensions规定了为固定值4
-    int routing_dim;//路由的维度，可以理解为先遍历板内a,b维度
+    int routing_dim;//路由的维度，板内有两个维度，板件只有一个维度
     //这个dest_loc是一个int型数组，用于表示目标路由器的位置，现在可能为[1,1,1,0]
     int* dest_loc;
-    //添加一个hm路由维度,即在routing_dim的基础上再遍历x,y维度
-    int hm_dim;//【新加】
 
     topo_mesh_event() {}
     //这个dim现在传值只能为4
     topo_mesh_event(int dim) {	dimensions = dim; routing_dim = 0; dest_loc = new int[dim]; hm_dim = 0; }
     virtual ~topo_mesh_event() { delete[] dest_loc; }
-    //下面这个clone函数是为了复制一个topo_mesh_event事件对象
+    //下面这个clone函数是为了复制一个topo_mesh_event事件对象，可能需要目标位置的信息，但又不希望对其进行改变所以才会有clone函数
     virtual internal_router_event* clone(void) override
     {
         topo_mesh_event* tte = new topo_mesh_event(*this);
@@ -59,7 +57,6 @@ public:
         //操作符 & 在这里是重载的，它根据 ser 的当前模式（PACK 或 UNPACK）来决定是序列化还是反序列化。  
         ser & dimensions;
         ser & routing_dim;
-        ser & hm_id;//【新加】
         //dest_loc数组的大小和dimensions有关，是一个动态分配的数组，需要在反序列化的情况下
         //为其分配内存。在反序列化时，我们需要为新对象创建数组并填充数据
         if ( ser.mode() == SST::Core::Serialization::serializer::UNPACK ) {
@@ -86,7 +83,7 @@ public:
     int phase;
 
     topo_mesh_init_event() {}
-    //带参数的构造函数
+    //带参数的构造函数，赋值为父类的dim，phase初始化为0
     topo_mesh_init_event(int dim) : topo_mesh_event(dim), phase(0) { }
     virtual ~topo_mesh_init_event() { }
     virtual internal_router_event* clone(void) override
@@ -148,11 +145,11 @@ private:
     int* id_loc;
     //新添一个hm_id数组参数,通过hm_id解析出hm板子在拓扑中的位置
     int hm_id;//【新加】
-    //为每个路由器添加一个存储当前维度的行和列交换机的信息
+    //为每个路由器添加一个存储当前维度的行和列交换机的信息，第一个存储行交换机，第二个存储列交换机
     int (* switches)[2];
 
     int dimensions=4;//由于Hammingmesh由四个参数构成拓扑形装，所以我们默认dimensions为4
-    //若字符串为"4x4x2x2"，则解析出来的dim_size数组为[4,4,2,2]
+    //若字符串为"3x3x2x2"，则解析出来的dim_size数组为[3,3,2,2]
     //前两个是板内的维度大小，后面两个是hm/板间维度的大小
     int* dim_size;
     int* dim_width;
@@ -166,10 +163,9 @@ private:
     
 public:
     //初始化需要多接受hm_id参数，便于唯一确定路由器的位置
-    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns, int hm_id );
+    topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns );
     ~topo_mesh();
-    //这个ev对象是topo_mesh_event(在本文件中定义)的父类，强转为tte后将包含dimensions;routing_dim;int* dest_loc;int hm_dim;//【新加】四个成员变量的信息
-    //已经在ev对象中添加了一个hm_dim的遍历维度，现在可以进行hm维度的遍历
+    //这个ev对象是topo_mesh_event(在本文件中定义)的父类
     virtual void route_packet(int port, int vc, internal_router_event* ev);
     //这个函数返回一个internal_router_event对象，它的主要职责是将输入的事件封装
     //到一个新的topo_mesh_event对象中，并为后续的路由决策准备必要的信息
@@ -179,8 +175,10 @@ public:
     virtual internal_router_event* process_UntimedData_input(RtrEvent* ev);
     //获取端口的状态函数
     virtual PortState getPortState(int port) const;
+    //根据端口号获取主机ID
     virtual int getEndpointID(int port);
 
+    //获取每个虚拟网络的虚拟通道
     virtual void getVCsPerVN(std::vector<int>& vcs_per_vn) {
         for ( int i = 0; i < num_vns; ++i ) {
             vcs_per_vn[i] = 1;
@@ -188,16 +186,16 @@ public:
     }
     
 protected:
-    //这个函数只是进行了定义，具体在mesh.cc文件里面实现，dest_dist是节点ID
+    //这个函数是用于hm拓扑中的路径选择
     virtual int choose_multipath(int start_port, int num_ports, int dest_dist);
-    //【新增：这个函数用于不同hm板上的路由选择】
-    virtual int choose_hmpath(int start_port, int num_ports, int dest_dist);
 private:
-    //在定义中新添了一个hm_id参数
-    void idToLocation(int hm_id, int id, int *location) const;
+    //确定路由器/或者交换机在拓扑中的位置信息
+    void idToLocation(int id, int *location) const;
+    //解析字符串中的维度信息(现在固定是4)
     void parseDimString(const std::string &shape, int *output) const;
     //用于获取目的路由器id的函数
     int get_dest_router(int dest_id) const;
+    //用于获取目的路由器的id
     int get_dest_local_port(int dest_id) const;
     //用于获取目的路由器所在的hm_id
     int get_dest_hm(int dest_id) const;//【新加】
