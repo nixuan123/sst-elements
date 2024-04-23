@@ -24,11 +24,10 @@
 using namespace SST::Merlin;
 
 
-topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns,int* hm_id) :
+topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_id, int num_vns) :
     Topology(cid),
     router_id(rtr_id),
     num_vns(num_vns),
-    hm_id(hm_id),//新添一个hm_id
 {
 
     // Get the various parameters
@@ -37,7 +36,9 @@ topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_i
     shape = params.find<std::string>("shape");
     if ( !shape.compare("") ) {
     }
-
+    
+    
+    
     // Need to parse the shape string to get the number of dimensions
     // and the size of each dimension    
     dimensions = 4;//dimensions = std::count(shape.begin(),shape.end(),'x') + 1;
@@ -45,10 +46,14 @@ topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_i
     dim_size = new int[4];//dim_size = new int[dimensions];
     dim_width = new int[2];//dim_width = new int[dimensions];
     port_start = new int[2][2];//port_start = new int[dimensions][2];
+    switch_fid = dim_size[0] * dim_size[1] * dim_size[2] * dim_size[3];
     //dimensions默认为4，若传入2x2x2x2，dim_size=[2,2,2,2]
     parseDimString(shape, dim_size);
-
+    //定义一个变量用于存储路由器的数量
+    int num_routers=dim_size[0]*dim_size[1]*dim_size[2]*dim_size[3]
+    
     std::string width = params.find<std::string>("width", "");
+    //如果width没有赋初始值，则给他一个值为1
     if ( width.compare("") == 0 ) {
         for ( int i = 0 ; i < dimensions ; i++ )
             dim_width[i] = 1;
@@ -73,27 +78,29 @@ topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_i
     //每个路由器连接Node的端口数量
     num_local_ports = params.find<int>("local_ports", 1);
 
-    //每个路由器需要的端口数量
+    //行、列交换机分别需要的端口数量
+    num_switch_ports =  new int[2];
+    num_switch_ports[0] = 2*dim_size[0]*dim_size[2];
+    num_switch_ports[1] = 2*dim_size[1]*dim_size[3];
+ 
+    //每个路由器需要的端口数量,我们只考虑二维的板子
     int needed_ports = 0;
-    /*for ( int i = 0 ; i < dimensions ; i++ ) {
-        needed_ports += 2 * dim_width[i];
-    }*/
-
-    //【改动】
     for ( int i = 0 ; i < 2 ; i++ ) {
         needed_ports += 2 * dim_width[i];
     }
 
-
+    //这个num_ports是所给参数
     if ( num_ports < (needed_ports+num_local_ports) ) {
         output.fatal(CALL_INFO, -1, "Number of ports should be at least %d for this configuration\n", needed_ports+num_local_ports);
     }
 
+    //路由器的起始主机id号
     local_port_start = needed_ports;// Local delivery is on the last ports
+    
     //id_loc现在是一个有四个参数的数组，例如通过[1,1,1,0]确定他在hm拓扑中的唯一位置
     id_loc = new int[4];//id_loc = new int[dimensions]; 
-    //此函数新添一个hm_id参数,若hm_id=2,router_id=3,则id_loc=[1,1,0,1]
-    idToLocation(hm_id, router_id, id_loc);
+    //通过此函数对路由器id进行一个拓扑的位置映射
+    idToLocation(router_id, id_loc);
 }
 
 topo_mesh::~topo_mesh()
@@ -179,8 +186,8 @@ topo_mesh::process_input(RtrEvent* ev)
     
     // Need to figure out what the mesh address is for easier
     // routing. 重新设置tt_ev对象中的mesh地址
-    int run_id = get_dest_router(tt_ev->getDest());
-    idToLocation(hm_id, run_id, tt_ev->dest_loc);
+    int run_id = get_dest_router(tt_ev->getDest()); 
+    idToLocation(run_id, tt_ev->dest_loc);
 
     return tt_ev;
 }
@@ -249,12 +256,12 @@ internal_router_event* topo_mesh::process_UntimedData_input(RtrEvent* ev)
         /* For broadcast, first send to rtr 0 */
 	//如果是广播地址，将目标地址的位置设置为根路由器的位置，现在添加了一个hm_id用于
 	//确定该路由器在哪块hm板子上，dest_loc的值为[0,0,0,0]
-        idToLocation(0, 0, tt_ev->dest_loc);
+        idToLocation(0, tt_ev->dest_loc);
     } else {//若不是广播地址
-        int rtr_id = get_dest_router(tt_ev->getDest());
-	int hm_id = get_dest_hm(tt_ev->getDest());//【新加】
+        int rtr_id = get_dest_router(tt_ev->getDest());//通过主机号得到目标路由器id
+	//int hm_id = get_dest_hm(tt_ev->getDest());//【新加】通过主机号得到目标路由器所在的hm板id,没必要
 	//将目标位置设置为目标路由器的位置
-        idToLocation(hm_id, rtr_id, tt_ev->dest_loc);
+        idToLocation(rtr_id, tt_ev->dest_loc);//dest_loc是一个四元组，例如[0,0,]
     }
     return tt_ev;
 }
@@ -265,7 +272,7 @@ internal_router_event* topo_mesh::process_UntimedData_input(RtrEvent* ev)
 //来确定端口的状态。这个状态信息对于路由器的路由决策和网络配置是非常重要的。
 Topology::PortState
 topo_mesh::getPortState(int port) const
-{   //检查函数端口号是否大于或等于local_port_start，这是本地端口的起始编号
+{   //检查端口号是否大于或等于local_port_start，这是本地端口的起始编号
     if (port >= local_port_start) {
         if ( port < (local_port_start + num_local_ports) )
 	    //表示该端口是连接到本地主机的端口
@@ -282,7 +289,7 @@ topo_mesh::getPortState(int port) const
             if ( id_loc[d] == (dim_size[d]-1) ) {
                 //printf("\tReturning Unconnected\n");
 		//这里需要更改，如果端口属于该维度正向范围并且是该维度上位置的最大值，则它连接的是二级胖树
-                return UNCONNECTED;
+                return R2R;//return UNCONNECTED;
             }
             return R2R;
 	//函数检查端口号是否落在该维度的负向端口范围
@@ -290,8 +297,8 @@ topo_mesh::getPortState(int port) const
             //printf("\tPort matches neg Dim: %d.  [%d, %d)\n", d, port_start[d][0], (port_start[d][0]+dim_width[d]));
             if ( id_loc[d] == 0 ) {
                 //printf("\tReturning Unconnected\n");
-		//同理也需要更改
-                return UNCONNECTED;
+		//同理也需要更改,同样是改为连接到二级胖树
+                return R2R;//return UNCONNECTED;
             }
             return R2R;
         }
@@ -299,40 +306,58 @@ topo_mesh::getPortState(int port) const
     return R2R;
 }
 
-/*
+//【改动】传入路由器id，将id转换为一个四元组存储在location数组中
+//注意与py中的_idToLoc函数区分，两者的用途不一样，c语言中是用于事件中目的路由器位置定位
+//而py中是用于给所有的id定位
 void
-topo_mesh::idToLocation(int run_id, int *location) const
-{
-	for ( int i = dimensions - 1; i > 0; i-- ) {
-		int div = 1;
-		for ( int j = 0; j < i; j++ ) {
-			div *= dim_size[j];
-		}
-		int value = (run_id / div);
-		location[i] = value;
-		run_id -= (value * div);
-	}
-	location[0] = run_id;
-}*/
+topo_mesh::idToLocation(int run_id, int *location) {
+    int hm_id = 0;
+    int inner_id = 0;
+    int num = 0;
+    
+    int i;
+    // 初始化location数组
+    for (i = 0; i < 4; i++) {
+        location[i] = 0;
+    }
+    //switch_fid【新增】是新定义的全局变量，用于存储hm拓扑的起始交换机id
+    if (0 < run_id && run_id < switch_fid) {
+        // 设置前两位
+        inner_id = run_id % (dim_size[0] * dim_size[1]);
+        location[0] = inner_id % dim_size[1];
+        location[1] = inner_id / dim_size[1];
 
-//根据dim_size数组的范围确定location数组
-void
-topo_mesh::idToLocation(int hm_id, int run_id, int *location) {
-    // 根据 hm_id 计算 location 数组的后两位
-    location[dimensions - 2] = (hm_id % dim_size[dimensions - 2]);
-    location[dimensions - 1] = (hm_id / dim_size[dimensions - 2]) % dim_size[dimensions - 1];
+        // 设置后两位
+        hm_id = run_id / (dim_size[0] * dim_size[1]);
+        location[2] = hm_id % dim_size[3];
+        location[3] = hm_id / dim_size[3];
+    } else if (switch_fid <= run_id && run_id < switch_fid + dim_size[2]) {
+        // 设置前两位
+        location[0] = run_id;
+        location[1] = run_id;
 
-    // 根据 run_id 计算 location 数组的前两位
-    location[0] = (run_id % dim_size[0]);
-    location[1] = (run_id / dim_size[0]) % dim_size[1];
+        // 设置后两位
+        num = run_id - switch_fid;
+        location[2] = run_id;
+        location[3] = num;
+    } else if (switch_fid + dim_size[2] <= run_id && run_id < switch_fid + dim_size[2] + dim_size[3]) {
+        // 设置前两位为 run_id
+        location[0] = run_id;
+        location[1] = run_id;
 
-    // 确保每个位置的值都在 0 到 dim_size 对应维度的范围内
-    for (int i = 0; i < dimensions; i++) {
-        if (location[i] >= dim_size[i]) {
-            location[i] = 0; // 如果计算出的值超出范围，则重置为 0
+        // 设置后两位
+        num = run_id - (switch_fid + _dim_size[2]);
+        location[2] = num;
+        location[3] = run_id;
+    } else {
+        // 如果 rtr_id 不在预期的范围内，设置每个位置为 run_id
+        for (i = 0; i < 4; i++) {
+            location[i] = run_id;
         }
     }
 }
+
+
 
 //解析mesh.shape字符串的函数，例如传入4x4x2x2，解析出来的数组output应为[4,4,2,2]
 void
@@ -349,18 +374,20 @@ topo_mesh::parseDimString(const std::string &shape, int *output) const
     }
 }
 
-
+//返回目的主机所在路由器的id号
 int
 topo_mesh::get_dest_router(int dest_id) const
 {
     return dest_id / num_local_ports;
 }
 
+//返回目的主机所连接路由器的端口号
 int
 topo_mesh::get_dest_local_port(int dest_id) const
 {
     return local_port_start + (dest_id % num_local_ports);
 }
+
 //【新增】获取目的节点id的hm_id
 int
 topo_mesh::get_dest_hm(int dest_id) const
@@ -396,7 +423,7 @@ topo_mesh::choose_hmpath(int start_port, int num_ports, int dest_dist){
 }
 
 
-//返回网卡id/终端id(唯一)
+//返回网卡id/终端id(唯一),只有hm板子上的路由器才有网卡，交换机上是没有的
 int
 topo_mesh::getEndpointID(int port)
 {
