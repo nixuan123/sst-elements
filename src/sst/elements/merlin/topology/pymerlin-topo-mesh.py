@@ -126,9 +126,7 @@ class _topoMeshBase(Topology):
 
     #将路由器标识符rtr_id转换为在拓扑上的位置location【改动】
     def _idToLoc(self, rtr_id):
-        hm_id = self.getHmid(rtr_id)
         location = list((0 for _ in range(self._num_dims)))
-        r_id = rtr_id
     
         # 计算 switch_fid
         switch_fid = self._dim_size[0] * self._dim_size[1] * self._dim_size[2] * self._dim_size[3]
@@ -136,36 +134,36 @@ class _topoMeshBase(Topology):
         # 根据 rtr_id 的值设置 location 数组
         if 0 < rtr_id < switch_fid:
             # 设置前两位
-            inner_id=rtr_id%(_dim_size[0]*_dim_size[1])
-            location[0] = inner_id % _dim_size[1]
-            location[1] = inner_id // _dim_size[1]
+            inner_id=rtr_id%(self._dim_size[0]*self._dim_size[1])
+            location[0] = inner_id % self._dim_size[1]
+            location[1] = inner_id // self._dim_size[1]
         
             # 设置后两位
-            hm_id = rtr_id // (_dim_size[0] * _dim_size[1])
-            location[2] = hm_id % _dim_size[3]
-            location[3] = hm_id // _dim_size[3]
+            hm_id = rtr_id // (self._dim_size[0] * self._dim_size[1])
+            location[2] = hm_id % self._dim_size[3]
+            location[3] = hm_id // self._dim_size[3]
         elif switch_fid <= rtr_id < switch_fid + self._dim_size[2]:
-            # 设置前两位为 rtr_id
-            location[0] = r_id
-            location[1] = r_id
+            # 设置前两位
+            location[0] = rtr_id
+            location[1] = rtr_id
     
             # 设置后两位
             num = rtr_id - switch_fid
-            location[2] = r_id
+            location[2] = rtr_id
             location[3] = num
         elif switch_fid + self._dim_size[2] <= rtr_id < switch_fid + self._dim_size[2] + self._dim_size[3]:
-            # 设置前两位为 rtr_id
-            location[0] = r_id
-            location[1] = r_id
+            # 设置前两位
+            location[0] = rtr_id
+            location[1] = rtr_id
     
             # 设置后两位
             num = rtr_id - (switch_fid + self._dim_size[2])
             location[2] = num
-            location[3] = r_id
+            location[3] = rtr_id
         else:
             # 如果 rtr_id 不在预期的范围内，设置每个位置为 rtr_id
             for i in range(self._num_dims):  # 这里应该是 self._num_dims 而不是 dimensions
-                location[i] = r_id
+                location[i] = rtr_id
     
         return location
        
