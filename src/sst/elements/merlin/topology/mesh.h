@@ -34,7 +34,7 @@ class topo_mesh_event : public internal_router_event {
 public:
     
     int dimensions;//现在这个dimensions规定了为固定值4
-    int routing_dim;//路由的维度，板内有两个维度，板件只有一个维度
+    int routing_dim;//路由的维度，板内有两个维度，板间只有一个维度
     //这个dest_loc是一个int型数组，用于表示目标路由器的位置，现在可能为[1,1,1,0]
     int* dest_loc;
 
@@ -141,11 +141,13 @@ private:
     
     //router_id保持不变，通过router_id可以解析出hm板子内部路由器的位置
     int router_id;
-    //即可能id_loc=[1,1,1,0]
+    //目的路由器id的位置
     int* id_loc;
-    //新添一个hm_id数组参数,通过hm_id解析出hm板子在拓扑中的位置
-    int hm_id;//【新加】
-    //为每个路由器添加一个存储当前维度的行和列交换机的信息，第一个存储行交换机，第二个存储列交换机
+    
+    //【新加】建立一个变量用于存储交换机的起始id
+    int switch_fid;
+    
+    //为每个路由器添加一个存储当前路由器的行和列交换机的信息，第一个存储行交换机，第二个存储列交换机
     int (* switches)[2];
 
     int dimensions=4;//由于Hammingmesh由四个参数构成拓扑形装，所以我们默认dimensions为4
@@ -153,10 +155,12 @@ private:
     //前两个是板内的维度大小，后面两个是hm/板间维度的大小
     int* dim_size;
     int* dim_width;
-
+    
     int (* port_start)[2]; // port_start[dim][direction: 0=pos, 1=neg]
 
-    int num_local_ports;
+    int num_local_ports;//每个路由器需要连接的主机端口数量
+    int *num_switch_ports;//【新增】行、列交换机分别需要的端口数量
+    int hm_id;//【新增】路由器的hm板id
     int local_port_start;
 
     int num_vns;
@@ -197,8 +201,6 @@ private:
     int get_dest_router(int dest_id) const;
     //用于获取目的路由器的id
     int get_dest_local_port(int dest_id) const;
-    //用于获取目的路由器所在的hm_id
-    int get_dest_hm(int dest_id) const;//【新加】
     //用于获取目的路由器的行列交换机信息
     int get_dest_switches(int dest_id) const;//【新加】
 
