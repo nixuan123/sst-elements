@@ -46,7 +46,10 @@ topo_mesh::topo_mesh(ComponentId_t cid, Params& params, int num_ports, int rtr_i
     dim_size = new int[4];//dim_size = new int[dimensions];
     dim_width = new int[2];//dim_width = new int[dimensions];
     port_start = new int[2][2];//port_start = new int[dimensions][2];
+    //【新增】拓扑的起始交换机id
     switch_fid = dim_size[0] * dim_size[1] * dim_size[2] * dim_size[3];
+    //【新增】路由器所在的hm板id
+    hm_id = router_id / (dim_size[0]*dim_size[1]);
     //dimensions默认为4，若传入2x2x2x2，dim_size=[2,2,2,2]
     parseDimString(shape, dim_size);
     //定义一个变量用于存储路由器的数量
@@ -111,16 +114,16 @@ topo_mesh::~topo_mesh()
     delete [] port_start;
 }
 
-//路由器内部的路由具体该怎么走，即这个数据包下一步要送到该路由器的具体的端口id
-//ev->getDest()返回的是一个网络标识符Node ID类型的数据
+//给输入端口设置输出端口的虚拟通道，给端口添加事件
 void
 topo_mesh::route_packet(int port, int vc, internal_router_event* ev)
-{   //通过网卡id定位到路由器id,但要注意还有一个hm_id没有确定
+{   //通过网卡id定位到事件的目的路由器id
     int dest_router = get_dest_router(ev->getDest());
-    //再次通过网卡id定位到hm_id
-    int dest_hm =get_dest_hm(ev->getDest());
-    //如果定位到的hm_id等于当前的hm_id
-    if(dest_hm == hm_id){
+    //通过目的路由器id定位到所在的目的hm板id
+    int dest_hm_id =get_dest_hm(dest_router);
+    
+    //如果目标hm板id等于当前路由器的hm板id
+    if(dest_hm_id == hm_id){
 	并且路由器id=当前的路由器id,即Node ID(网卡id/终端id)在当前路由器上
 	if ( dest_router == router_id ) {
 	//则将路由器内部路由的下一个端口设置为本地的连接网卡的端口号
@@ -129,23 +132,23 @@ topo_mesh::route_packet(int port, int vc, internal_router_event* ev)
     //若定位到的路由器不在当前路由器上，则进行当前路由器端口选择，选择一个离目标近的
     //出口port。
     else {
-        //强制转换，转换为专门用于处理mesh拓扑的事件对象
+        //强制转换，转换为专门用于处理hm拓扑的事件对象
         topo_mesh_event *tt_ev = static_cast<topo_mesh_event*>(ev);
-        //由于是板内路由，所以只需要遍历前面两个维度
+        //从事件的起始维度开始遍历，由于是板内路由，所以只需要遍历前面两个维度
         for ( int dim = tt_ev->routing_dim ; dim < 2 ; dim++ ) {
             if ( tt_ev->dest_loc[dim] != id_loc[dim] ) {
-
+                //判断当前与目标同维度的位置大小
                 int go_pos = (id_loc[dim] < tt_ev->dest_loc[dim]);
-                //这个函数负责选择一个出口端口进行路由
+                //这个函数负责选择一个输出端口进行数据包转发（RC阶段）
                 int p = choose_multipath(
                         port_start[dim][(go_pos) ? 0 : 1],
                         dim_width[dim],
                         abs(id_loc[dim] - tt_ev->dest_loc[dim]));
                 //将事件的下一个端口设置为p
                 tt_ev->setNextPort(p);
-                //如果当前路由器在板内边缘位置并且是非R2N端口，需要设置虚拟通道
+                //如果端口所在的路由器在当前维度的位置为0并且是非R2N端口，需要设置虚拟通道
                 if ( id_loc[dim] == 0 && port < local_port_start ) { // Crossing dateline
-                    //切换为虚拟通道，通过异或操作来切换虚拟通道的编号来实现
+                    //切换为虚拟通道，通过异或操作来切换虚拟通道的编号来实现，如果vc=2，new_va=3
 		    int new_vc = vc ^ 1;
 		    //使用tt_ev->setVC方法更新事件对象的虚拟通道编号
                     tt_ev->setVC(new_vc); // Toggle VC
@@ -162,12 +165,13 @@ topo_mesh::route_packet(int port, int vc, internal_router_event* ev)
                 tt_ev->setVC(vc & (~1)); // Reset the VC
             }
         }
+	
     }//end else
 }//end if
 
 //进行板间路由
 else{
-	//通过二级胖树，为了防止回路出现，还需要设置虚拟通道
+	//通过交换机，为了防止回路出现，还需要设置虚拟通道
 }		
 }
 
@@ -374,7 +378,7 @@ topo_mesh::parseDimString(const std::string &shape, int *output) const
     }
 }
 
-//返回目的主机所在路由器的id号
+//传入一个主机id的值返回所在路由器的id号
 int
 topo_mesh::get_dest_router(int dest_id) const
 {
@@ -388,11 +392,11 @@ topo_mesh::get_dest_local_port(int dest_id) const
     return local_port_start + (dest_id % num_local_ports);
 }
 
-//【新增】获取目的节点id的hm_id
+//【新增】获取路由器的hm_id
 int
-topo_mesh::get_dest_hm(int dest_id) const
+topo_mesh::get_dest_hm(int rtr_id) const
 {
-	return dest_id / num_local_ports / (dim_size[0]*dim_size[1])
+	return rtr_id / (dim_size[0]*dim_size[1])
 }
 
 //【新增】获取目的节点的行列交换机的信息
@@ -402,7 +406,10 @@ topo_mesh::get_dest_switch(int dest_id) const
 	return dest_id / num_local_ports / (dim_size[0]*dim_size[1])
 }
 
-
+int p = choose_multipath(
+                        port_start[dim][(go_pos) ? 0 : 1],
+                        dim_width[dim],
+                        abs(id_loc[dim] - tt_ev->dest_loc[dim]));
 //这个函数是已经确定在相同的hm_id板子上进行路由选择，后面我还需要定义一个
 //在不同hm板上进行路由选择的函数
 int
